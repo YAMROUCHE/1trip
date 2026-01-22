@@ -10,7 +10,7 @@ const Icons = {
   logo: (
     <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
       <rect width="28" height="28" rx="8" fill="#14B8A6"/>
-      <path d="M9 9h10v2H11v2h6v2h-6v2h8v2H9V9z" fill="white"/>
+      <text x="14" y="19" textAnchor="middle" fill="white" fontSize="12" fontWeight="700">1T</text>
     </svg>
   ),
   profile: (
@@ -115,7 +115,7 @@ const Icons = {
 const MENU_ITEMS = [
   { id: 'exit', icon: 'exit', label: 'Exit trip' },
   { id: 'summary', icon: 'summary', label: 'Summary' },
-  { id: 'planner', icon: 'planner', label: 'Planner' },
+  { id: 'monvoyage', icon: 'planner', label: 'Mon Voyage' },
   { id: 'budget', icon: 'budget', label: 'Budget' },
   { id: 'packing', icon: 'packing', label: 'Packing' },
   { id: 'documents', icon: 'documents', label: 'Documents' },
@@ -207,7 +207,7 @@ export function StipplSidebar({ activeTab, onTabChange, userName = 'Y' }) {
   const [hoveredItem, setHoveredItem] = useState(null);
 
   const handleNavClick = (tabId) => {
-    if (tabId === 'planner') {
+    if (tabId === 'monvoyage') {
       setShowMenu(!showMenu);
     } else {
       onTabChange(tabId);
@@ -226,7 +226,7 @@ export function StipplSidebar({ activeTab, onTabChange, userName = 'Y' }) {
 
   return (
     <aside style={styles.sidebar}>
-      {/* Logo TripFlow */}
+      {/* Logo 1Trip */}
       <div style={styles.logo} onClick={() => onTabChange('accueil')}>
         {Icons.logo}
       </div>
@@ -253,10 +253,10 @@ export function StipplSidebar({ activeTab, onTabChange, userName = 'Y' }) {
 
         <button
           style={{
-            ...styles.navItem(activeTab === 'planner' || showMenu),
+            ...styles.navItem(activeTab === 'monvoyage' || showMenu),
             ...(hoveredItem === 'planner' ? { background: '#f0fdfa', color: '#14B8A6' } : {}),
           }}
-          onClick={() => handleNavClick('planner')}
+          onClick={() => handleNavClick('monvoyage')}
           onMouseEnter={() => setHoveredItem('planner')}
           onMouseLeave={() => setHoveredItem(null)}
           title="Mon voyage"

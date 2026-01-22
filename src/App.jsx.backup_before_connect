@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useAPIData } from './hooks/useAPI';
 import { Icon } from './components/ui';
 import { MapView } from './components/Map';
@@ -8,7 +8,6 @@ import { POI_DATA, CATEGORIES, getAllPOIForDestination, getAllPOICount } from '.
 import './styles/global.css';
 import { ConstruireView } from './components/Construire';
 import { AccueilView } from './components/AccueilView';
-import TransportView from './components/TransportView';
 import { Sidebar } from './components/Sidebar';
 import { TransportBlock } from "./components/TransportBlock";
 
@@ -20,8 +19,22 @@ const TRIP_CONFIG = {
   budget: 30000,
 };
 
-// Les destinations sont maintenant chargées depuis localStorage (via Construire)
-const TRIP_DESTINATIONS_DEFAULT = [];
+const TRIP_DESTINATIONS = [
+  { id: 'el-nido', country: 'philippines', nights: 6, startDay: 1, transport: { type: 'avion', duration: '24h', cost: 850 }, sleeping: 'One El Nido Suite', costPerNight: 85 },
+  { id: 'port-barton', country: 'philippines', nights: 3, startDay: 7, transport: { type: 'van', duration: '3h', cost: 25 }, sleeping: 'Gilian Beach Front', costPerNight: 40 },
+  { id: 'bohol', country: 'philippines', nights: 5, startDay: 10, transport: { type: 'avion', duration: '4h', cost: 80 }, sleeping: 'Alona Beach Resort', costPerNight: 70 },
+  { id: 'moalboal', country: 'philippines', nights: 6, startDay: 15, transport: { type: 'ferry', duration: '2h', cost: 15 }, sleeping: 'Panagsama Stay', costPerNight: 55 },
+  { id: 'bangkok', country: 'thailande', nights: 5, startDay: 21, transport: { type: 'avion', duration: '3h', cost: 120 }, sleeping: 'Ibis Sukhumvit', costPerNight: 60 },
+  { id: 'chiang-mai', country: 'thailande', nights: 7, startDay: 26, transport: { type: 'avion', duration: '1h', cost: 45 }, sleeping: 'Rachamankha', costPerNight: 90 },
+  { id: 'koh-lanta', country: 'thailande', nights: 8, startDay: 33, transport: { type: 'avion+ferry', duration: '4h', cost: 85 }, sleeping: 'Lanta Casa Blanca', costPerNight: 75 },
+  { id: 'hoi-an', country: 'vietnam', nights: 5, startDay: 41, transport: { type: 'avion', duration: '2h', cost: 95 }, sleeping: 'Vinh Hung Heritage', costPerNight: 50 },
+  { id: 'ninh-binh', country: 'vietnam', nights: 3, startDay: 46, transport: { type: 'train', duration: '6h', cost: 35 }, sleeping: 'Tam Coc Garden', costPerNight: 65 },
+  { id: 'hanoi', country: 'vietnam', nights: 4, startDay: 49, transport: { type: 'bus', duration: '2h', cost: 10 }, sleeping: 'Essence Hanoi', costPerNight: 55 },
+  { id: 'ubud', country: 'bali', nights: 10, startDay: 53, transport: { type: 'avion', duration: '4h', cost: 150 }, sleeping: 'Alam Jiwa', costPerNight: 80 },
+  { id: 'sanur', country: 'bali', nights: 6, startDay: 63, transport: { type: 'voiture', duration: '1h', cost: 15 }, sleeping: 'Segara Village', costPerNight: 70 },
+  { id: 'nusa-penida', country: 'bali', nights: 4, startDay: 69, transport: { type: 'bateau', duration: '45min', cost: 20 }, sleeping: 'La Rip Bungalows', costPerNight: 60 },
+  { id: 'canggu', country: 'bali', nights: 14, startDay: 73, transport: { type: 'bateau+voiture', duration: '2h', cost: 25 }, sleeping: 'Theanna Eco Villa', costPerNight: 85 },
+];
 
 const styles = {
   sidebar: { width: '80px', background: '#ffffff', borderRight: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: '16px', gap: '4px' },
@@ -52,7 +65,7 @@ export default function App() {
   const [sidebarTab, setSidebarTab] = useState('accueil');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeTab, setActiveTab] = useState('destinations');
-  const [destinations, setDestinations] = useState([]);
+  const [destinations, setDestinations] = useState(TRIP_DESTINATIONS);
   const [favorites, setFavorites] = useState([]);
   const [explorerCountry, setExplorerCountry] = useState('philippines');
   const [explorerDest, setExplorerDest] = useState('el-nido');
@@ -60,87 +73,8 @@ export default function App() {
   const [guideDest, setGuideDest] = useState('el-nido');
   const [guideCategory, setGuideCategory] = useState('all');
   const [myProgram, setMyProgram] = useState([]);
-  const [editingHotel, setEditingHotel] = useState(null); // { destId, field }
-  const [availableHotels, setAvailableHotels] = useState([]);
-  const [loadingHotels, setLoadingHotels] = useState(false);
-
-  // Charger les hôtels disponibles pour une destination
-  const loadHotelsForDestination = async (destId) => {
-    setLoadingHotels(true);
-    try {
-      const response = await fetch(`https://tripflow-api.youssef-amrouche.workers.dev/api/pois?destination=${destId}&category=dormir`);
-      const data = await response.json();
-      setAvailableHotels(data.pois || []);
-    } catch (error) {
-      console.error('Erreur chargement hotels:', error);
-      setAvailableHotels([]);
-    }
-    setLoadingHotels(false);
-  };
-
-  // Mettre à jour l'hébergement d'une destination
-  const updateHotel = (destId, hotelName) => {
-    const newDestinations = destinations.map(d => 
-      d.id === destId ? { ...d, sleeping: hotelName } : d
-    );
-    setDestinations(newDestinations);
-    
-    // Mettre à jour localStorage
-    const saved = localStorage.getItem('tripflow-itineraire');
-    if (saved) {
-      const data = JSON.parse(saved);
-      data.etapes = data.etapes.map(e => 
-        e.destination_id === destId ? { ...e, hebergement_nom: hotelName } : e
-      );
-      localStorage.setItem('tripflow-itineraire', JSON.stringify(data));
-    }
-    setEditingHotel(null);
-  };
 
   // Chargement des données depuis l'API (avec fallback sur données locales)
-
-  // Charger les destinations depuis localStorage (créées dans Construire)
-  useEffect(() => {
-    const loadDestinations = () => {
-      try {
-        const saved = localStorage.getItem('tripflow-itineraire');
-        if (saved) {
-          const data = JSON.parse(saved);
-          if (data.etapes && data.etapes.length > 0) {
-            // Convertir les etapes en format destinations
-            let currentDay = 1;
-            const convertedDestinations = data.etapes.map((etape, index) => {
-              const dest = {
-                id: etape.destination_id,
-                country: etape.country_id || 'philippines',
-                nights: etape.nb_nuits || 3,
-                startDay: currentDay,
-                transport: {
-                  type: etape.transport_type || 'avion',
-                  duration: etape.transport_duree || '2h',
-                  cost: etape.transport_cout || 0
-                },
-                sleeping: etape.hebergement_nom || 'À réserver',
-                costPerNight: etape.hebergement_prix || 50
-              };
-              currentDay += dest.nights;
-              return dest;
-            });
-            setDestinations(convertedDestinations);
-          }
-        }
-      } catch (err) {
-        console.error('Erreur chargement destinations:', err);
-      }
-    };
-    
-    loadDestinations();
-    
-    // Écouter les changements de localStorage
-    window.addEventListener('storage', loadDestinations);
-    return () => window.removeEventListener('storage', loadDestinations);
-  }, []);
-
   const { data: apiData, loading: apiLoading, error: apiError } = useAPIData();
 
   const totalNights = destinations.reduce((sum, d) => sum + d.nights, 0);
@@ -170,74 +104,6 @@ export default function App() {
   };
 
   const isInProgram = (poiId) => myProgram.some(p => p.id === poiId);
-
-  // Vérifier si une destination est déjà dans le voyage
-  const isDestinationInTrip = (destId) => destinations.some(d => d.id === destId);
-
-  // Ajouter une destination au voyage
-  const addDestinationToTrip = (destId) => {
-    if (isDestinationInTrip(destId)) return;
-    
-    const destInfo = DESTINATION_INFO[destId];
-    const country = Object.entries(DESTINATIONS).find(([c, dests]) => dests.includes(destId))?.[0] || 'philippines';
-    
-    // Calculer le startDay
-    const lastDest = destinations[destinations.length - 1];
-    const startDay = lastDest ? lastDest.startDay + lastDest.nights : 1;
-    
-    const newDest = {
-      id: destId,
-      country: country,
-      nights: destInfo?.days || 3,
-      startDay: startDay,
-      transport: { type: 'avion', duration: '2h', cost: 0 },
-      sleeping: 'À réserver',
-      costPerNight: 50
-    };
-    
-    const newDestinations = [...destinations, newDest];
-    setDestinations(newDestinations);
-    
-    // Sauvegarder dans localStorage pour synchroniser avec Construire
-    const saved = localStorage.getItem('tripflow-itineraire');
-    const data = saved ? JSON.parse(saved) : { itineraire: { id: 'trip-1', budget_total: 30000 }, etapes: [] };
-    
-    data.etapes.push({
-      id: 'etape-' + Date.now(),
-      destination_id: destId,
-      destination_name: destInfo?.name || destId,
-      nb_nuits: newDest.nights,
-      hebergement_prix: newDest.costPerNight,
-      transport_type: 'avion',
-      transport_cout: 0,
-      ordre: data.etapes.length + 1
-    });
-    
-    localStorage.setItem('tripflow-itineraire', JSON.stringify(data));
-  };
-
-  // Supprimer une destination du voyage
-  const removeDestinationFromTrip = (destId) => {
-    const newDestinations = destinations.filter(d => d.id !== destId);
-    
-    // Recalculer les startDay
-    let currentDay = 1;
-    const recalculated = newDestinations.map(d => {
-      const updated = { ...d, startDay: currentDay };
-      currentDay += d.nights;
-      return updated;
-    });
-    
-    setDestinations(recalculated);
-    
-    // Mettre à jour localStorage
-    const saved = localStorage.getItem('tripflow-itineraire');
-    if (saved) {
-      const data = JSON.parse(saved);
-      data.etapes = data.etapes.filter(e => e.destination_id !== destId);
-      localStorage.setItem('tripflow-itineraire', JSON.stringify(data));
-    }
-  };
 
   const explorerPois = useMemo(() => { if (apiData?.poisByDestination?.[explorerDest]) { return apiData.poisByDestination[explorerDest]; } return POI_DATA[explorerCountry]?.[explorerDest] || []; }, [apiData, explorerCountry, explorerDest]);
   const guidePois = useMemo(() => {
@@ -326,7 +192,6 @@ export default function App() {
                         <th style={{ ...styles.th, width: '200px' }}><span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Icon name="bed" size={14} />HÉBERGEMENT</span></th>
                         <th style={{ ...styles.th, width: '120px' }}><span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Icon name="search" size={14} />EXPLORER</span></th>
                         <th style={{ ...styles.th, width: '140px' }}><span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Icon name="plane" size={14} />TRANSPORT</span></th>
-                        <th style={{ ...styles.th, width: '80px', textAlign: 'center' }}>ACTIONS</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -352,92 +217,13 @@ export default function App() {
                                 <button onClick={() => updateNights(dest.id, 1)} style={styles.nightsBtn}>+</button>
                               </div>
                             </td>
-                            <td style={styles.td}>
-                              {editingHotel === dest.id ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                  {loadingHotels ? (
-                                    <span style={{ fontSize: '12px', color: '#6b7280' }}>Chargement...</span>
-                                  ) : (
-                                    <select
-                                      autoFocus
-                                      value=""
-                                      onChange={(e) => {
-                                        if (e.target.value === '__manual__') {
-                                          const custom = prompt('Nom de l\'hébergement:');
-                                          if (custom) updateHotel(dest.id, custom);
-                                        } else if (e.target.value) {
-                                          updateHotel(dest.id, e.target.value);
-                                        }
-                                      }}
-                                      onBlur={() => setEditingHotel(null)}
-                                      style={{
-                                        padding: '6px 12px',
-                                        border: '2px solid #14B8A6',
-                                        borderRadius: '6px',
-                                        fontSize: '12px',
-                                        minWidth: '200px',
-                                        outline: 'none',
-                                        cursor: 'pointer'
-                                      }}
-                                    >
-                                      <option value="">-- Choisir un hôtel --</option>
-                                      {availableHotels.map(hotel => (
-                                        <option key={hotel.id} value={hotel.name}>
-                                          {hotel.price_range} {hotel.name}
-                                        </option>
-                                      ))}
-                                      <option value="__manual__">✏️ Saisie manuelle...</option>
-                                    </select>
-                                  )}
-                                  <button
-                                    onClick={() => setEditingHotel(null)}
-                                    style={{ fontSize: '10px', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer' }}
-                                  >
-                                    Annuler
-                                  </button>
-                                </div>
-                              ) : (
-                                <button
-                                  onClick={() => { loadHotelsForDestination(dest.id); setEditingHotel(dest.id); }}
-                                  style={{
-                                    ...styles.badge('#f0fdf4', '#166534'),
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '6px'
-                                  }}
-                                  title="Cliquez pour modifier"
-                                >
-                                  <Icon name="bed" size={14} />
-                                  {dest.sleeping}
-                                  <Icon name="edit" size={12} style={{ opacity: 0.5 }} />
-                                </button>
-                              )}
-                            </td>
+                            <td style={styles.td}><span style={styles.badge('#f0fdf4', '#166534')}><Icon name="check" size={14} />{dest.sleeping}</span></td>
                             <td style={styles.td}>
                               <button onClick={() => { setExplorerCountry(dest.country); setExplorerDest(dest.id); setSidebarTab('explore'); }} style={{ ...styles.badge('#eef2ff', '#4f46e5'), border: 'none', cursor: 'pointer' }}>
                                 <Icon name="plus" size={14} />{poiCount} lieux
                               </button>
                             </td>
                             <td style={styles.td}>{dest.transport && <span style={styles.badge('#fef3c7', '#b45309')}><Icon name="plane" size={12} />{dest.transport.duration}</span>}</td>
-                            <td style={{ ...styles.td, textAlign: 'center' }}>
-                              <button 
-                                onClick={() => removeDestinationFromTrip(dest.id)}
-                                style={{ 
-                                  padding: '6px 10px', 
-                                  background: '#fef2f2', 
-                                  border: 'none', 
-                                  borderRadius: '6px', 
-                                  cursor: 'pointer',
-                                  color: '#dc2626',
-                                  fontSize: '12px'
-                                }}
-                                title="Supprimer"
-                              >
-                                <Icon name="trash" size={14} />
-                              </button>
-                            </td>
                           </tr>
                         );
                       })}
@@ -600,27 +386,10 @@ export default function App() {
                   {DESTINATIONS[explorerCountry]?.map(d => {
                     const info = DESTINATION_INFO[d];
                     return (
-                      <div key={d} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <button onClick={() => setExplorerDest(d)}
-                          style={{ padding: '6px 14px', borderRadius: '20px', border: explorerDest === d ? '2px solid #6366f1' : '1px solid #e5e7eb', cursor: 'pointer', fontSize: '13px', background: 'white', color: explorerDest === d ? '#6366f1' : '#374151', fontWeight: explorerDest === d ? 600 : 400 }}>
-                          {info?.name}
-                        </button>
-                        <button 
-                          onClick={() => isDestinationInTrip(d) ? removeDestinationFromTrip(d) : addDestinationToTrip(d)}
-                          style={{ 
-                            padding: '4px 8px', 
-                            borderRadius: '12px', 
-                            border: 'none', 
-                            cursor: 'pointer', 
-                            fontSize: '11px', 
-                            fontWeight: 500,
-                            background: isDestinationInTrip(d) ? '#dcfce7' : '#14B8A6', 
-                            color: isDestinationInTrip(d) ? '#166534' : 'white'
-                          }}
-                        >
-                          {isDestinationInTrip(d) ? '✓' : '+'}
-                        </button>
-                      </div>
+                      <button key={d} onClick={() => setExplorerDest(d)}
+                        style={{ padding: '6px 14px', borderRadius: '20px', border: explorerDest === d ? '2px solid #6366f1' : '1px solid #e5e7eb', cursor: 'pointer', fontSize: '13px', background: 'white', color: explorerDest === d ? '#6366f1' : '#374151', fontWeight: explorerDest === d ? 600 : 400 }}>
+                        {info?.name}
+                      </button>
                     );
                   })}
                 </div>
@@ -777,11 +546,6 @@ export default function App() {
             favorites={favorites}
             apiData={apiData}
           />
-        )}
-
-        {/* VUE TRANSPORT */}
-        {sidebarTab === 'transport' && (
-          <TransportView />
         )}
       </div>
     </div>

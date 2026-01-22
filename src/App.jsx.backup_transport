@@ -8,7 +8,6 @@ import { POI_DATA, CATEGORIES, getAllPOIForDestination, getAllPOICount } from '.
 import './styles/global.css';
 import { ConstruireView } from './components/Construire';
 import { AccueilView } from './components/AccueilView';
-import TransportView from './components/TransportView';
 import { Sidebar } from './components/Sidebar';
 import { TransportBlock } from "./components/TransportBlock";
 
@@ -777,11 +776,6 @@ export default function App() {
             favorites={favorites}
             apiData={apiData}
           />
-        )}
-
-        {/* VUE TRANSPORT */}
-        {sidebarTab === 'transport' && (
-          <TransportView />
         )}
       </div>
     </div>

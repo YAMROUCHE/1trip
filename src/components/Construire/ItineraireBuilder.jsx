@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { TransportBlock } from '../TransportBlock';
 import { Icon } from '../ui';
 import { DestinationCard } from './DestinationCard';
 import { COUNTRIES, DESTINATIONS } from '../../data/config';
@@ -172,21 +173,38 @@ export function ItineraireBuilder({
           </button>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {etapes.map((etape, index) => (
-            <DestinationCard
-              key={etape.id}
-              etape={etape}
-              index={index}
-              onUpdate={(updates) => onUpdateEtape(etape.id, updates)}
-              onRemove={() => onRemoveEtape(etape.id)}
-              onDragStart={(e) => handleDragStart(e, index)}
-              onDragOver={(e) => handleDragOver(e, index)}
-              onDragEnd={handleDragEnd}
-              isDragging={draggedIndex === index}
-              transportTypes={TRANSPORT_TYPES}
-            />
-          ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+          {etapes.map((etape, index) => {
+            const nextEtape = etapes[index + 1];
+            return (
+              <div key={etape.id}>
+                <DestinationCard
+                  etape={etape}
+                  index={index}
+                  onUpdate={(updates) => onUpdateEtape(etape.id, updates)}
+                  onRemove={() => onRemoveEtape(etape.id)}
+                  onDragStart={(e) => handleDragStart(e, index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDragEnd={handleDragEnd}
+                  isDragging={draggedIndex === index}
+                  transportTypes={TRANSPORT_TYPES}
+                />
+                {nextEtape && (
+                  <TransportBlock
+                    fromDestination={etape.destination_id}
+                    toDestination={nextEtape.destination_id}
+                    onSelect={(transport) => {
+                      onUpdateEtape(etape.id, {
+                        transport_type: transport.transport_type,
+                        transport_cout: transport.estimated_cost_eur,
+                        transport_duree: transport.duration_hours + 'h'
+                      });
+                    }}
+                  />
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
