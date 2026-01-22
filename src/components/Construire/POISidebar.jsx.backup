@@ -1,0 +1,390 @@
+import { useState, useMemo } from 'react';
+import { Icon } from '../ui';
+import { DESTINATIONS } from '../../data/config';
+import { CATEGORIES } from '../../data/poi';
+
+const FILTER_OPTIONS = [
+  { id: 'all', label: 'Tous', icon: 'grid' },
+  { id: 'voir', label: 'À voir', icon: 'eye' },
+  { id: 'activite', label: 'Activités', icon: 'activity' },
+  { id: 'restaurant', label: 'Restos', icon: 'utensils' },
+  { id: 'bar', label: 'Bars', icon: 'glass' },
+  { id: 'hotel', label: 'Hôtels', icon: 'bed' }
+];
+
+const CRENEAU_OPTIONS = [
+  { id: 'matin', label: 'Matin', icon: 'sunrise' },
+  { id: 'apresmidi', label: 'Après-midi', icon: 'sun' },
+  { id: 'soir', label: 'Soirée', icon: 'moon' }
+];
+
+export function POISidebar({ 
+  pois, 
+  destinationId, 
+  onAddPOI,
+  onAddFavorite,
+  favorites = []
+}) {
+  const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const [familyOnly, setFamilyOnly] = useState(false);
+  const [mustSeeOnly, setMustSeeOnly] = useState(false);
+
+  const dest = DESTINATIONS[destinationId];
+
+  // Filtrer les POI
+  const filteredPOIs = useMemo(() => {
+    return pois.filter(poi => {
+      // Filtre type
+      if (filter !== 'all') {
+        const poiType = poi.type?.toLowerCase() || poi.category?.toLowerCase();
+        if (!poiType?.includes(filter)) return false;
+      }
+
+      // Filtre recherche
+      if (search) {
+        const searchLower = search.toLowerCase();
+        const nameMatch = poi.name?.toLowerCase().includes(searchLower);
+        const descMatch = poi.description?.toLowerCase().includes(searchLower);
+        const tagsMatch = poi.tags?.some(t => t.toLowerCase().includes(searchLower));
+        if (!nameMatch && !descMatch && !tagsMatch) return false;
+      }
+
+      // Filtre famille
+      if (familyOnly && !poi.familyFriendly) return false;
+
+      // Filtre incontournables
+      if (mustSeeOnly && !poi.mustSee) return false;
+
+      return true;
+    });
+  }, [pois, filter, search, familyOnly, mustSeeOnly]);
+
+  // Grouper par catégorie
+  const groupedPOIs = useMemo(() => {
+    const groups = {};
+    filteredPOIs.forEach(poi => {
+      const category = poi.category || poi.type || 'Autre';
+      if (!groups[category]) groups[category] = [];
+      groups[category].push(poi);
+    });
+    return groups;
+  }, [filteredPOIs]);
+
+  const getCategoryIcon = (category) => {
+    const cat = category?.toLowerCase() || '';
+    if (cat.includes('voir') || cat.includes('incontournable')) return 'eye';
+    if (cat.includes('activité') || cat.includes('activite')) return 'activity';
+    if (cat.includes('restaurant') || cat.includes('restaurer')) return 'utensils';
+    if (cat.includes('bar') || cat.includes('verre')) return 'glass';
+    if (cat.includes('hôtel') || cat.includes('hotel') || cat.includes('loger')) return 'bed';
+    return 'map-pin';
+  };
+
+  const getPriceDisplay = (poi) => {
+    if (poi.price) return poi.price;
+    if (poi.priceRange) return poi.priceRange;
+    return null;
+  };
+
+  const isFavorite = (poiId) => favorites.some(f => f.id === poiId);
+
+  return (
+    <div style={{ 
+      width: 320, 
+      borderLeft: '1px solid #e5e7eb',
+      backgroundColor: 'white',
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%'
+    }}>
+      {/* Header */}
+      <div style={{ 
+        padding: 16, 
+        borderBottom: '1px solid #e5e7eb',
+        backgroundColor: '#f9fafb'
+      }}>
+        <h3 style={{ 
+          fontSize: 14, 
+          fontWeight: 600, 
+          color: '#374151',
+          margin: '0 0 12px 0'
+        }}>
+          📍 POI disponibles - {dest?.name || 'Sélectionnez un jour'}
+        </h3>
+
+        {/* Recherche */}
+        <div style={{ position: 'relative', marginBottom: 12 }}>
+          <Icon 
+            name="search" 
+            size={16} 
+            style={{ 
+              position: 'absolute', 
+              left: 10, 
+              top: '50%', 
+              transform: 'translateY(-50%)',
+              color: '#9ca3af'
+            }} 
+          />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher..."
+            style={{
+              width: '100%',
+              padding: '8px 12px 8px 36px',
+              borderRadius: 8,
+              border: '1px solid #d1d5db',
+              fontSize: 13
+            }}
+          />
+        </div>
+
+        {/* Filtres type */}
+        <div style={{ 
+          display: 'flex', 
+          flexWrap: 'wrap', 
+          gap: 6,
+          marginBottom: 12 
+        }}>
+          {FILTER_OPTIONS.map(opt => (
+            <button
+              key={opt.id}
+              onClick={() => setFilter(opt.id)}
+              style={{
+                padding: '4px 10px',
+                borderRadius: 6,
+                border: 'none',
+                backgroundColor: filter === opt.id ? '#6366f1' : '#f3f4f6',
+                color: filter === opt.id ? 'white' : '#6b7280',
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: 'pointer'
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Filtres spéciaux */}
+        <div style={{ display: 'flex', gap: 12 }}>
+          <label style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 6,
+            fontSize: 12,
+            color: '#6b7280',
+            cursor: 'pointer'
+          }}>
+            <input
+              type="checkbox"
+              checked={familyOnly}
+              onChange={(e) => setFamilyOnly(e.target.checked)}
+              style={{ accentColor: '#6366f1' }}
+            />
+            👨‍👩‍👦 Famille
+          </label>
+          <label style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 6,
+            fontSize: 12,
+            color: '#6b7280',
+            cursor: 'pointer'
+          }}>
+            <input
+              type="checkbox"
+              checked={mustSeeOnly}
+              onChange={(e) => setMustSeeOnly(e.target.checked)}
+              style={{ accentColor: '#6366f1' }}
+            />
+            ⭐ Incontournables
+          </label>
+        </div>
+      </div>
+
+      {/* Liste POI */}
+      <div style={{ flex: 1, overflow: 'auto', padding: 8 }}>
+        {filteredPOIs.length === 0 ? (
+          <div style={{ 
+            textAlign: 'center', 
+            padding: 30,
+            color: '#9ca3af'
+          }}>
+            <Icon name="search" size={32} style={{ marginBottom: 12, opacity: 0.5 }} />
+            <p>Aucun POI trouvé</p>
+          </div>
+        ) : (
+          Object.entries(groupedPOIs).map(([category, categoryPOIs]) => (
+            <div key={category} style={{ marginBottom: 16 }}>
+              <div style={{ 
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '8px 12px',
+                backgroundColor: '#f9fafb',
+                borderRadius: 6,
+                marginBottom: 8
+              }}>
+                <Icon name={getCategoryIcon(category)} size={14} style={{ color: '#6b7280' }} />
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>
+                  {category}
+                </span>
+                <span style={{ 
+                  fontSize: 11, 
+                  color: '#9ca3af',
+                  marginLeft: 'auto'
+                }}>
+                  {categoryPOIs.length}
+                </span>
+              </div>
+
+              {categoryPOIs.map(poi => (
+                <div
+                  key={poi.id}
+                  draggable
+                  onDragStart={(e) => {
+                    e.currentTarget.style.opacity = '0.5';
+                    e.currentTarget.style.transform = 'scale(0.98)';
+                    e.dataTransfer.setData('application/json', JSON.stringify(poi));
+                    e.dataTransfer.effectAllowed = 'copy';
+                  }}
+                  style={{
+                    padding: 12,
+                    marginBottom: 8,
+                    backgroundColor: 'white',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.borderColor = '#6366f1';
+                    e.currentTarget.style.backgroundColor = '#faf5ff';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.borderColor = '#e5e7eb';
+                    e.currentTarget.style.backgroundColor = 'white';
+                  }}
+                >
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    marginBottom: 8
+                  }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ 
+                        fontWeight: 600, 
+                        fontSize: 13, 
+                        color: '#111827',
+                        marginBottom: 4
+                      }}>
+                        {poi.mustSee && '⭐ '}
+                        {poi.name}
+                      </div>
+                      {poi.description && (
+                        <div style={{ 
+                          fontSize: 12, 
+                          color: '#6b7280',
+                          lineHeight: 1.4,
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden'
+                        }}>
+                          {poi.description}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddFavorite?.(poi);
+                      }}
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 6,
+                        border: 'none',
+                        backgroundColor: isFavorite(poi.id) ? '#fef3c7' : '#f3f4f6',
+                        color: isFavorite(poi.id) ? '#d97706' : '#9ca3af',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      <Icon name="star" size={14} />
+                    </button>
+                  </div>
+
+                  {/* Badges */}
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 6,
+                    marginBottom: 10
+                  }}>
+                    {getPriceDisplay(poi) && (
+                      <span style={{
+                        fontSize: 11,
+                        padding: '2px 6px',
+                        backgroundColor: '#f0fdf4',
+                        color: '#166534',
+                        borderRadius: 4
+                      }}>
+                        {getPriceDisplay(poi)}
+                      </span>
+                    )}
+                    {poi.familyFriendly && (
+                      <span style={{
+                        fontSize: 11,
+                        padding: '2px 6px',
+                        backgroundColor: '#fef3c7',
+                        color: '#92400e',
+                        borderRadius: 4
+                      }}>
+                        👨‍👩‍👦
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Boutons ajouter */}
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {CRENEAU_OPTIONS.map(creneau => (
+                      <button
+                        key={creneau.id}
+                        onClick={() => onAddPOI(creneau.id, poi)}
+                        style={{
+                          flex: 1,
+                          padding: '6px 8px',
+                          backgroundColor: '#f5f3ff',
+                          border: '1px solid #e0e7ff',
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: 500,
+                          color: '#6366f1',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 4
+                        }}
+                      >
+                        <Icon name={creneau.icon} size={12} />
+                        {creneau.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}

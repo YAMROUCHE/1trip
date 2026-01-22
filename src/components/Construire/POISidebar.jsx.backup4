@@ -1,0 +1,701 @@
+import { useState, useMemo } from 'react';
+import { Icon } from '../ui';
+import { DESTINATIONS } from '../../data/config';
+
+const FILTER_OPTIONS = [
+  { id: 'all', label: 'Tous' },
+  { id: 'activite', label: 'Activités' },
+  { id: 'restaurant', label: 'Restos' },
+  { id: 'hotel', label: 'Hôtels' }
+];
+
+const JOURNEY_TYPES = [
+  { 
+    id: 'plage', 
+    label: 'Plage', 
+    icon: 'sun',
+    keywords: ['plage', 'beach', 'snorkeling', 'mer', 'sable', 'baignade', 'surf', 'île', 'island', 'lagon', 'lagoon', 'bay', 'crique']
+  },
+  { 
+    id: 'culture', 
+    label: 'Culture', 
+    icon: 'book',
+    keywords: ['temple', 'musée', 'museum', 'palais', 'palace', 'historique', 'heritage', 'monument', 'église', 'church', 'pagode', 'wat', 'quartier', 'old town', 'marché', 'market']
+  },
+  { 
+    id: 'nature', 
+    label: 'Nature', 
+    icon: 'tree',
+    keywords: ['cascade', 'waterfall', 'falls', 'randonnée', 'trek', 'forêt', 'forest', 'montagne', 'mountain', 'volcan', 'rizière', 'rice', 'jungle', 'parc', 'park', 'lac', 'lake', 'mangrove', 'spa', 'massage', 'yoga', 'détente']
+  }
+];
+
+const CRENEAU_OPTIONS = [
+  { id: 'matin', label: 'Matin' },
+  { id: 'apresmidi', label: 'Après-midi' },
+  { id: 'soir', label: 'Soirée' }
+];
+
+export function POISidebar({ 
+  pois, 
+  destinationId, 
+  onAddPOI,
+  onAddFavorite,
+  favorites = [],
+  plannedPOIs = []
+}) {
+  const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const [familyOnly, setFamilyOnly] = useState(false);
+  const [journeyType, setJourneyType] = useState(null);
+  const [openDropdown, setOpenDropdown] = useState(null);
+
+  const dest = DESTINATIONS[destinationId];
+
+  // Filtrer les POI
+  const filteredPOIs = useMemo(() => {
+    return pois.filter(poi => {
+      if (filter !== 'all') {
+        const poiType = poi.type?.toLowerCase() || poi.category?.toLowerCase();
+        if (!poiType?.includes(filter)) return false;
+      }
+
+      if (search) {
+        const searchLower = search.toLowerCase();
+        const nameMatch = poi.name?.toLowerCase().includes(searchLower);
+        const descMatch = poi.description?.toLowerCase().includes(searchLower);
+        const tagsMatch = poi.tags?.some(t => t.toLowerCase().includes(searchLower));
+        if (!nameMatch && !descMatch && !tagsMatch) return false;
+      }
+
+      if (familyOnly && !poi.familyFriendly) return false;
+
+      if (journeyType) {
+        const journey = JOURNEY_TYPES.find(j => j.id === journeyType);
+        if (journey) {
+          const textToSearch = `${poi.name} ${poi.description} ${(poi.tags || []).join(' ')}`.toLowerCase();
+          const hasKeyword = journey.keywords.some(keyword => textToSearch.includes(keyword));
+          if (!hasKeyword) return false;
+        }
+      }
+
+      return true;
+    });
+  }, [pois, filter, search, familyOnly, journeyType]);
+
+  // Trier : Incontournables en premier, puis par prix
+  const sortedPOIs = useMemo(() => {
+    return [...filteredPOIs].sort((a, b) => {
+      if (a.mustSee && !b.mustSee) return -1;
+      if (!a.mustSee && b.mustSee) return 1;
+      
+      const priceOrder = { '$': 1, '$$': 2, '$$$': 3, '$$$$': 4 };
+      const priceA = priceOrder[a.price] || priceOrder[a.priceRange] || 5;
+      const priceB = priceOrder[b.price] || priceOrder[b.priceRange] || 5;
+      return priceA - priceB;
+    });
+  }, [filteredPOIs]);
+
+  // Grouper par catégorie
+  const groupedPOIs = useMemo(() => {
+    const groups = {};
+    
+    const mustSees = sortedPOIs.filter(poi => poi.mustSee);
+    if (mustSees.length > 0) {
+      groups['Incontournables'] = mustSees;
+    }
+    
+    sortedPOIs.filter(poi => !poi.mustSee).forEach(poi => {
+      const category = poi.category || poi.type || 'Autre';
+      if (!groups[category]) groups[category] = [];
+      groups[category].push(poi);
+    });
+    
+    return groups;
+  }, [sortedPOIs]);
+
+  // Incontournables non planifiés
+  const unplannedMustSee = useMemo(() => {
+    const plannedIds = plannedPOIs.map(p => p.id);
+    return pois.filter(poi => poi.mustSee && !plannedIds.includes(poi.id));
+  }, [pois, plannedPOIs]);
+
+  const getCategoryIcon = (category) => {
+    const cat = category?.toLowerCase() || '';
+    if (cat.includes('incontournable')) return 'star';
+    if (cat.includes('voir')) return 'eye';
+    if (cat.includes('activité') || cat.includes('activite')) return 'activity';
+    if (cat.includes('restaurant') || cat.includes('restaurer')) return 'utensils';
+    if (cat.includes('bar') || cat.includes('verre')) return 'glass';
+    if (cat.includes('hôtel') || cat.includes('hotel') || cat.includes('loger')) return 'bed';
+    return 'map-pin';
+  };
+
+  const getPriceDisplay = (poi) => {
+    if (poi.price) return poi.price;
+    if (poi.priceRange) return poi.priceRange;
+    return null;
+  };
+
+  const isFavorite = (poiId) => favorites.some(f => f.id === poiId);
+  const isPlanned = (poiId) => plannedPOIs.some(p => p.id === poiId);
+
+  // Générer planning auto
+  const handleAutoPlanning = () => {
+    const availablePOIs = sortedPOIs.filter(poi => !plannedPOIs.some(p => p.id === poi.id));
+    
+    const matinKeywords = ['temple', 'trek', 'randonnée', 'excursion', 'tour', 'visite', 'marché', 'cascade', 'snorkeling'];
+    const matinPOI = availablePOIs.find(poi => {
+      const text = `${poi.name} ${poi.description} ${(poi.tags || []).join(' ')}`.toLowerCase();
+      return matinKeywords.some(k => text.includes(k));
+    }) || availablePOIs.find(poi => poi.mustSee);
+
+    const apresmidiKeywords = ['plage', 'beach', 'piscine', 'rizière', 'nature', 'balade', 'lac'];
+    const apresmidiPOI = availablePOIs.find(poi => {
+      if (poi.id === matinPOI?.id) return false;
+      const text = `${poi.name} ${poi.description} ${(poi.tags || []).join(' ')}`.toLowerCase();
+      return apresmidiKeywords.some(k => text.includes(k));
+    }) || availablePOIs.find(poi => poi.id !== matinPOI?.id);
+
+    const soirKeywords = ['restaurant', 'bar', 'dîner', 'sunset', 'coucher', 'spectacle', 'night'];
+    const soirPOI = availablePOIs.find(poi => {
+      if (poi.id === matinPOI?.id || poi.id === apresmidiPOI?.id) return false;
+      const text = `${poi.name} ${poi.description} ${(poi.tags || []).join(' ')}`.toLowerCase();
+      return soirKeywords.some(k => text.includes(k));
+    });
+
+    if (matinPOI) onAddPOI('matin', matinPOI);
+    if (apresmidiPOI) onAddPOI('apresmidi', apresmidiPOI);
+    if (soirPOI) onAddPOI('soir', soirPOI);
+  };
+
+  // Ajouter tous les incontournables
+  const handleAddAllMustSee = () => {
+    unplannedMustSee.forEach((poi, index) => {
+      const creneaux = ['matin', 'apresmidi', 'soir'];
+      const creneau = creneaux[index % 3];
+      onAddPOI(creneau, poi);
+    });
+  };
+
+  // Gérer dropdown
+  const handleAddClick = (poiId) => {
+    setOpenDropdown(openDropdown === poiId ? null : poiId);
+  };
+
+  const handleCreneauSelect = (creneau, poi) => {
+    onAddPOI(creneau, poi);
+    setOpenDropdown(null);
+  };
+
+  return (
+    <div style={{ 
+      width: 380, 
+      borderLeft: '1px solid #e5e7eb',
+      backgroundColor: '#fafafa',
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%'
+    }}>
+      {/* Header */}
+      <div style={{ 
+        padding: '16px 20px', 
+        borderBottom: '1px solid #e5e7eb',
+        backgroundColor: 'white'
+      }}>
+        <div style={{ 
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          marginBottom: 16
+        }}>
+          <Icon name="map-pin" size={16} style={{ color: '#6366f1' }} />
+          <span style={{ fontSize: 15, fontWeight: 600, color: '#111827' }}>
+            {dest?.name || 'Sélectionnez un jour'}
+          </span>
+        </div>
+
+        {/* Recherche */}
+        <div style={{ position: 'relative' }}>
+          <Icon 
+            name="search" 
+            size={16} 
+            style={{ 
+              position: 'absolute', 
+              left: 12, 
+              top: '50%', 
+              transform: 'translateY(-50%)',
+              color: '#9ca3af'
+            }} 
+          />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher un lieu..."
+            style={{
+              width: '100%',
+              padding: '10px 12px 10px 40px',
+              borderRadius: 8,
+              border: '1px solid #e5e7eb',
+              fontSize: 14,
+              backgroundColor: '#f9fafb'
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Suggestions */}
+      <div style={{ 
+        padding: '16px 20px', 
+        borderBottom: '1px solid #e5e7eb',
+        backgroundColor: 'white'
+      }}>
+        <div style={{ 
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          marginBottom: 12
+        }}>
+          <Icon name="zap" size={14} style={{ color: '#6b7280' }} />
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            Suggestions
+          </span>
+        </div>
+
+        {/* Types de journée */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          {JOURNEY_TYPES.map(type => (
+            <button
+              key={type.id}
+              onClick={() => setJourneyType(journeyType === type.id ? null : type.id)}
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                borderRadius: 6,
+                border: journeyType === type.id ? '2px solid #6366f1' : '1px solid #e5e7eb',
+                backgroundColor: journeyType === type.id ? '#eef2ff' : 'white',
+                color: journeyType === type.id ? '#4f46e5' : '#374151',
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6
+              }}
+            >
+              <Icon name={type.icon} size={14} />
+              {type.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Bouton planning auto */}
+        <button
+          onClick={handleAutoPlanning}
+          style={{
+            width: '100%',
+            padding: '10px 16px',
+            backgroundColor: '#f3f4f6',
+            color: '#374151',
+            border: '1px solid #e5e7eb',
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 500,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8
+          }}
+        >
+          <Icon name="calendar" size={14} />
+          Remplir ma journée automatiquement
+        </button>
+      </div>
+
+      {/* Filtres */}
+      <div style={{ 
+        padding: '12px 20px', 
+        borderBottom: '1px solid #e5e7eb',
+        backgroundColor: 'white'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <Icon name="sliders" size={14} style={{ color: '#6b7280' }} />
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            Filtres
+          </span>
+          {journeyType && (
+            <button
+              onClick={() => setJourneyType(null)}
+              style={{
+                marginLeft: 'auto',
+                padding: '2px 8px',
+                backgroundColor: '#fef2f2',
+                color: '#dc2626',
+                border: 'none',
+                borderRadius: 4,
+                fontSize: 11,
+                cursor: 'pointer'
+              }}
+            >
+              Réinitialiser
+            </button>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+          {FILTER_OPTIONS.map(opt => (
+            <button
+              key={opt.id}
+              onClick={() => setFilter(opt.id)}
+              style={{
+                padding: '6px 12px',
+                borderRadius: 6,
+                border: 'none',
+                backgroundColor: filter === opt.id ? '#6366f1' : '#f3f4f6',
+                color: filter === opt.id ? 'white' : '#6b7280',
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: 'pointer'
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        <label style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 8,
+          fontSize: 13,
+          color: '#374151',
+          cursor: 'pointer'
+        }}>
+          <input
+            type="checkbox"
+            checked={familyOnly}
+            onChange={(e) => setFamilyOnly(e.target.checked)}
+            style={{ 
+              width: 16, 
+              height: 16,
+              accentColor: '#6366f1' 
+            }}
+          />
+          Adapté aux familles uniquement
+        </label>
+      </div>
+
+      {/* Liste POI */}
+      <div style={{ flex: 1, overflow: 'auto', padding: '12px 20px' }}>
+        {sortedPOIs.length === 0 ? (
+          <div style={{ 
+            textAlign: 'center', 
+            padding: 40,
+            color: '#9ca3af'
+          }}>
+            <Icon name="search" size={32} style={{ marginBottom: 12, opacity: 0.5 }} />
+            <p style={{ margin: 0, fontSize: 14 }}>Aucun lieu trouvé</p>
+            {(journeyType || familyOnly || filter !== 'all') && (
+              <button
+                onClick={() => {
+                  setJourneyType(null);
+                  setFamilyOnly(false);
+                  setFilter('all');
+                }}
+                style={{
+                  marginTop: 12,
+                  padding: '8px 16px',
+                  backgroundColor: 'white',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: 6,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  color: '#374151'
+                }}
+              >
+                Réinitialiser les filtres
+              </button>
+            )}
+          </div>
+        ) : (
+          Object.entries(groupedPOIs).map(([category, categoryPOIs]) => (
+            <div key={category} style={{ marginBottom: 20 }}>
+              {/* Header catégorie */}
+              <div style={{ 
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: 10
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Icon 
+                    name={getCategoryIcon(category)} 
+                    size={14} 
+                    style={{ color: category === 'Incontournables' ? '#f59e0b' : '#6b7280' }} 
+                  />
+                  <span style={{ 
+                    fontSize: 12, 
+                    fontWeight: 600, 
+                    color: '#374151',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px'
+                  }}>
+                    {category}
+                  </span>
+                  <span style={{ 
+                    fontSize: 11, 
+                    color: '#9ca3af',
+                    backgroundColor: '#f3f4f6',
+                    padding: '2px 6px',
+                    borderRadius: 4
+                  }}>
+                    {categoryPOIs.length}
+                  </span>
+                </div>
+
+                {/* Bouton "Tout ajouter" pour incontournables */}
+                {category === 'Incontournables' && unplannedMustSee.length > 0 && (
+                  <button
+                    onClick={handleAddAllMustSee}
+                    style={{
+                      padding: '4px 10px',
+                      backgroundColor: '#fef3c7',
+                      color: '#92400e',
+                      border: '1px solid #fcd34d',
+                      borderRadius: 4,
+                      fontSize: 11,
+                      fontWeight: 500,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Tout ajouter
+                  </button>
+                )}
+              </div>
+
+              {/* POI Cards */}
+              {categoryPOIs.map(poi => (
+                <div
+                  key={poi.id}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/json', JSON.stringify(poi));
+                    e.dataTransfer.effectAllowed = 'copy';
+                    e.currentTarget.style.opacity = '0.5';
+                  }}
+                  onDragEnd={(e) => {
+                    e.currentTarget.style.opacity = '1';
+                  }}
+                  style={{
+                    padding: 14,
+                    marginBottom: 10,
+                    backgroundColor: 'white',
+                    border: isPlanned(poi.id) ? '2px solid #10b981' : (poi.mustSee ? '1px solid #fcd34d' : '1px solid #e5e7eb'),
+                    borderRadius: 10,
+                    cursor: 'grab',
+                    transition: 'all 0.15s',
+                    opacity: isPlanned(poi.id) ? 0.6 : 1
+                  }}
+                  onMouseOver={(e) => {
+                    if (!isPlanned(poi.id)) {
+                      e.currentTarget.style.borderColor = '#6366f1';
+                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(99, 102, 241, 0.15)';
+                    }
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.borderColor = isPlanned(poi.id) ? '#10b981' : (poi.mustSee ? '#fcd34d' : '#e5e7eb');
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
+                  {/* Ligne 1 : Nom + Favori */}
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    marginBottom: 6
+                  }}>
+                    <div style={{ 
+                      fontWeight: 600, 
+                      fontSize: 14, 
+                      color: '#111827',
+                      flex: 1,
+                      paddingRight: 8
+                    }}>
+                      {poi.name}
+                      {isPlanned(poi.id) && (
+                        <span style={{ 
+                          marginLeft: 8,
+                          fontSize: 11,
+                          color: '#10b981',
+                          fontWeight: 500
+                        }}>
+                          (ajouté)
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddFavorite?.(poi);
+                      }}
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 6,
+                        border: 'none',
+                        backgroundColor: isFavorite(poi.id) ? '#fef3c7' : '#f3f4f6',
+                        color: isFavorite(poi.id) ? '#d97706' : '#d1d5db',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      <Icon name="star" size={14} />
+                    </button>
+                  </div>
+
+                  {/* Description */}
+                  {poi.description && (
+                    <div style={{ 
+                      fontSize: 13, 
+                      color: '#6b7280',
+                      lineHeight: 1.5,
+                      marginBottom: 10,
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden'
+                    }}>
+                      {poi.description}
+                    </div>
+                  )}
+
+                  {/* Badges + Bouton Ajouter */}
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'space-between'
+                  }}>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {getPriceDisplay(poi) && (
+                        <span style={{
+                          fontSize: 12,
+                          padding: '3px 8px',
+                          backgroundColor: '#f0fdf4',
+                          color: '#166534',
+                          borderRadius: 4,
+                          fontWeight: 500
+                        }}>
+                          {getPriceDisplay(poi)}
+                        </span>
+                      )}
+                      {poi.familyFriendly && (
+                        <span style={{
+                          fontSize: 11,
+                          padding: '3px 8px',
+                          backgroundColor: '#f3f4f6',
+                          color: '#374151',
+                          borderRadius: 4,
+                          fontWeight: 500
+                        }}>
+                          Famille
+                        </span>
+                      )}
+                      {poi.mustSee && (
+                        <span style={{
+                          fontSize: 11,
+                          padding: '3px 8px',
+                          backgroundColor: '#fef3c7',
+                          color: '#92400e',
+                          borderRadius: 4,
+                          fontWeight: 500
+                        }}>
+                          A voir
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Dropdown Ajouter */}
+                    {!isPlanned(poi.id) && (
+                      <div style={{ position: 'relative' }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAddClick(poi.id);
+                          }}
+                          style={{
+                            padding: '6px 12px',
+                            backgroundColor: '#6366f1',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: 6,
+                            fontSize: 12,
+                            fontWeight: 500,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4
+                          }}
+                        >
+                          <Icon name="plus" size={12} />
+                          Ajouter
+                          <Icon name="chevron-down" size={12} />
+                        </button>
+
+                        {/* Dropdown menu */}
+                        {openDropdown === poi.id && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '100%',
+                            right: 0,
+                            marginTop: 4,
+                            backgroundColor: 'white',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: 8,
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                            zIndex: 100,
+                            minWidth: 140,
+                            overflow: 'hidden'
+                          }}>
+                            {CRENEAU_OPTIONS.map(creneau => (
+                              <button
+                                key={creneau.id}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCreneauSelect(creneau.id, poi);
+                                }}
+                                style={{
+                                  width: '100%',
+                                  padding: '10px 14px',
+                                  backgroundColor: 'white',
+                                  border: 'none',
+                                  borderBottom: creneau.id !== 'soir' ? '1px solid #f3f4f6' : 'none',
+                                  fontSize: 13,
+                                  color: '#374151',
+                                  cursor: 'pointer',
+                                  textAlign: 'left'
+                                }}
+                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'}
+                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                              >
+                                {creneau.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}

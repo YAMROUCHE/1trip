@@ -1,0 +1,116 @@
+/**
+ * AccueilView - Dashboard de la page d'accueil
+ */
+
+export function AccueilView({ 
+  totalNights, 
+  totalCost, 
+  budget, 
+  destinations, 
+  totalPOI, 
+  favorites,
+  onNavigate 
+}) {
+  // Calcul du countdown
+  const departDate = new Date('2026-04-01');
+  const today = new Date();
+  const daysUntilTrip = Math.max(0, Math.ceil((departDate - today) / (1000 * 60 * 60 * 24)));
+
+  return (
+    <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
+      {/* Countdown */}
+      <div style={{ 
+        background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', 
+        borderRadius: '16px', 
+        padding: '32px', 
+        color: 'white', 
+        marginBottom: '24px' 
+      }}>
+        <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '8px' }}>Départ dans</div>
+        <div style={{ fontSize: '48px', fontWeight: 700 }}>J-{daysUntilTrip}</div>
+        <div style={{ fontSize: '16px', marginTop: '8px', opacity: 0.9 }}>1 avril 2026 → 25 juin 2026</div>
+      </div>
+      
+      {/* Stats Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
+        <div style={{ background: 'white', borderRadius: '12px', padding: '20px', border: '1px solid #e5e7eb' }}>
+          <div style={{ fontSize: '32px', fontWeight: 700, color: '#6366f1' }}>{totalNights}</div>
+          <div style={{ fontSize: '14px', color: '#6b7280' }}>Nuits</div>
+        </div>
+        <div style={{ background: 'white', borderRadius: '12px', padding: '20px', border: '1px solid #e5e7eb' }}>
+          <div style={{ fontSize: '32px', fontWeight: 700, color: '#22c55e' }}>{destinations.length}</div>
+          <div style={{ fontSize: '14px', color: '#6b7280' }}>Destinations</div>
+        </div>
+        <div style={{ background: 'white', borderRadius: '12px', padding: '20px', border: '1px solid #e5e7eb' }}>
+          <div style={{ fontSize: '32px', fontWeight: 700, color: '#f59e0b' }}>{totalPOI}</div>
+          <div style={{ fontSize: '14px', color: '#6b7280' }}>Points d'intérêt</div>
+        </div>
+        <div style={{ background: 'white', borderRadius: '12px', padding: '20px', border: '1px solid #e5e7eb' }}>
+          <div style={{ fontSize: '32px', fontWeight: 700, color: '#ef4444' }}>4</div>
+          <div style={{ fontSize: '14px', color: '#6b7280' }}>Pays</div>
+        </div>
+      </div>
+      
+      {/* Budget Overview */}
+      <div style={{ background: 'white', borderRadius: '12px', padding: '24px', border: '1px solid #e5e7eb', marginBottom: '24px' }}>
+        <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px', margin: 0, marginBottom: '16px' }}>💰 Budget</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontSize: '14px', color: '#6b7280' }}>Estimé</div>
+            <div style={{ fontSize: '28px', fontWeight: 700, color: '#111827' }}>€{totalCost.toLocaleString()}</div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: '14px', color: '#6b7280' }}>Budget total</div>
+            <div style={{ fontSize: '28px', fontWeight: 700, color: '#22c55e' }}>€{budget.toLocaleString()}</div>
+          </div>
+        </div>
+        <div style={{ marginTop: '16px', background: '#f3f4f6', borderRadius: '8px', height: '8px', overflow: 'hidden' }}>
+          <div style={{ 
+            background: totalCost <= budget ? '#22c55e' : '#ef4444', 
+            height: '100%', 
+            width: `${Math.min(100, (totalCost / budget) * 100)}%`, 
+            borderRadius: '8px' 
+          }}></div>
+        </div>
+        <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '8px' }}>
+          {Math.round((totalCost / budget) * 100)}% du budget utilisé • Reste €{(budget - totalCost).toLocaleString()}
+        </div>
+      </div>
+      
+      {/* Quick Actions */}
+      <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '12px', color: '#374151' }}>Accès rapide</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+        <button 
+          onClick={() => onNavigate('explorer')} 
+          style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px', cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s' }}
+          onMouseOver={(e) => e.currentTarget.style.borderColor = '#6366f1'}
+          onMouseOut={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
+        >
+          <div style={{ fontSize: '24px', marginBottom: '8px' }}>🗺️</div>
+          <div style={{ fontSize: '16px', fontWeight: 600, color: '#111827' }}>Explorer</div>
+          <div style={{ fontSize: '13px', color: '#6b7280' }}>Découvrir les {totalPOI} lieux</div>
+        </button>
+        <button 
+          onClick={() => onNavigate('monvoyage')} 
+          style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px', cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s' }}
+          onMouseOver={(e) => e.currentTarget.style.borderColor = '#6366f1'}
+          onMouseOut={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
+        >
+          <div style={{ fontSize: '24px', marginBottom: '8px' }}>📋</div>
+          <div style={{ fontSize: '16px', fontWeight: 600, color: '#111827' }}>Mon Voyage</div>
+          <div style={{ fontSize: '13px', color: '#6b7280' }}>Voir l'itinéraire</div>
+        </button>
+        <button 
+          onClick={() => onNavigate('favoris')} 
+          style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px', cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s' }}
+          onMouseOver={(e) => e.currentTarget.style.borderColor = '#6366f1'}
+          onMouseOut={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
+        >
+          <div style={{ fontSize: '24px', marginBottom: '8px' }}>❤️</div>
+          <div style={{ fontSize: '16px', fontWeight: 600, color: '#111827' }}>Favoris</div>
+          <div style={{ fontSize: '13px', color: '#6b7280' }}>{favorites.length} lieu{favorites.length !== 1 ? 'x' : ''} sauvegardé{favorites.length !== 1 ? 's' : ''}</div>
+        </button>
+      </div>
+    </div>
+  );
+}
