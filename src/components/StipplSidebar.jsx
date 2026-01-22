@@ -115,7 +115,7 @@ const Icons = {
 const MENU_ITEMS = [
   { id: 'exit', icon: 'exit', label: 'Exit trip' },
   { id: 'summary', icon: 'summary', label: 'Summary' },
-  { id: 'planner', icon: 'planner', label: 'Planner' },
+  { id: 'monvoyage', icon: 'planner', label: 'Mon Voyage' },
   { id: 'budget', icon: 'budget', label: 'Budget' },
   { id: 'packing', icon: 'packing', label: 'Packing' },
   { id: 'documents', icon: 'documents', label: 'Documents' },
@@ -207,7 +207,7 @@ export function StipplSidebar({ activeTab, onTabChange, userName = 'Y' }) {
   const [hoveredItem, setHoveredItem] = useState(null);
 
   const handleNavClick = (tabId) => {
-    if (tabId === 'planner') {
+    if (tabId === 'monvoyage') {
       setShowMenu(!showMenu);
     } else {
       onTabChange(tabId);
@@ -253,10 +253,10 @@ export function StipplSidebar({ activeTab, onTabChange, userName = 'Y' }) {
 
         <button
           style={{
-            ...styles.navItem(activeTab === 'planner' || showMenu),
+            ...styles.navItem(activeTab === 'monvoyage' || showMenu),
             ...(hoveredItem === 'planner' ? { background: '#f0fdfa', color: '#14B8A6' } : {}),
           }}
-          onClick={() => handleNavClick('planner')}
+          onClick={() => handleNavClick('monvoyage')}
           onMouseEnter={() => setHoveredItem('planner')}
           onMouseLeave={() => setHoveredItem(null)}
           title="Mon voyage"
