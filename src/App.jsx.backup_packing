@@ -553,16 +553,6 @@ export default function App() {
             apiData={apiData}
           />
         )}
-
-        {/* VUE PACKING */}
-        {sidebarTab === 'packing' && (
-          <PackingView />
-        )}
-
-        {/* VUE DOCUMENTS */}
-        {sidebarTab === 'documents' && (
-          <DocumentsView />
-        )}
       </div>
     </div>
   );
