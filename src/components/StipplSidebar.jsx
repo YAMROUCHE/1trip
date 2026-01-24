@@ -287,6 +287,19 @@ export function StipplSidebar({ activeTab, onTabChange, userName = 'Y' }) {
 
         <button
           style={{
+            ...styles.navItem(activeTab === 'packing'),
+            ...(hoveredItem === 'packing' ? { background: '#f0fdfa', color: '#14B8A6' } : {}),
+          }}
+          onClick={() => handleNavClick('packing')}
+          onMouseEnter={() => setHoveredItem('packing')}
+          onMouseLeave={() => setHoveredItem(null)}
+          title="Packing"
+        >
+          {Icons.packing}
+        </button>
+
+        <button
+          style={{
             ...styles.navItem(activeTab === 'documents'),
             ...(hoveredItem === 'file' ? { background: '#f0fdfa', color: '#14B8A6' } : {}),
           }}

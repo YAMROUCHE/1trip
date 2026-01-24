@@ -312,11 +312,198 @@ export default function App() {
       )}
         {/* VUE PLAN */}
         {sidebarTab === 'monvoyage' && (
-          <ConstruireView
-            onAddFavorite={toggleFavorite}
-            favorites={favorites}
-            apiData={apiData}
-          />
+          <>
+            <div style={styles.tabs}>
+              <button onClick={() => setActiveTab('destinations')} style={styles.tab(activeTab === 'destinations')}>Destinations</button>
+              <button onClick={() => setActiveTab('daybyday')} style={styles.tab(activeTab === 'daybyday')}>Day by day</button>
+            </div>
+            <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+              <div style={{ flex: 1, overflow: 'auto' }}>
+                {activeTab === 'destinations' ? (
+                  <table style={styles.table}>
+                    <thead>
+                      <tr style={{ background: '#f8fafc' }}>
+                        <th style={{ ...styles.th, width: '250px' }}><span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Icon name="pin" size={14} />DESTINATION</span></th>
+                        <th style={{ ...styles.th, width: '120px', textAlign: 'center' }}><span style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}><Icon name="calendar" size={14} />NUITS</span></th>
+                        <th style={{ ...styles.th, width: '200px' }}><span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Icon name="bed" size={14} />HÉBERGEMENT</span></th>
+                        <th style={{ ...styles.th, width: '120px' }}><span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Icon name="search" size={14} />EXPLORER</span></th>
+                        <th style={{ ...styles.th, width: '140px' }}><span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Icon name="plane" size={14} />TRANSPORT</span></th>
+                        <th style={{ ...styles.th, width: '80px', textAlign: 'center' }}>ACTIONS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {destinations.map((dest, index) => {
+                        const info = DESTINATION_INFO[dest.id];
+                        const pois = POI_DATA[dest.country]?.[dest.id];
+                        const poiCount = pois ? (Array.isArray(pois) ? pois.length : Object.values(pois).flat().length) : 0;
+                        return (
+                          <tr key={dest.id} style={{ background: 'white' }}>
+                            <td style={styles.td}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div style={{ ...styles.destNum, background: getCountryColor(dest.country) }}>{index + 1}</div>
+                                <div>
+                                  <div style={{ fontWeight: 600, color: '#111827', fontSize: '14px' }}>{info?.name}</div>
+                                  <div style={{ fontSize: '12px', color: '#6b7280' }}>Jour {dest.startDay} - {dest.startDay + dest.nights - 1}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td style={{ ...styles.td, textAlign: 'center' }}>
+                              <div style={styles.nightsControl}>
+                                <button onClick={() => updateNights(dest.id, -1)} style={styles.nightsBtn}>−</button>
+                                <span style={styles.nightsValue}>{dest.nights}</span>
+                                <button onClick={() => updateNights(dest.id, 1)} style={styles.nightsBtn}>+</button>
+                              </div>
+                            </td>
+                            <td style={styles.td}>
+                              {editingHotel === dest.id ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  {loadingHotels ? (
+                                    <span style={{ fontSize: '12px', color: '#6b7280' }}>Chargement...</span>
+                                  ) : (
+                                    <select
+                                      autoFocus
+                                      value=""
+                                      onChange={(e) => {
+                                        if (e.target.value === '__manual__') {
+                                          const custom = prompt('Nom de l\'hébergement:');
+                                          if (custom) updateHotel(dest.id, custom);
+                                        } else if (e.target.value) {
+                                          updateHotel(dest.id, e.target.value);
+                                        }
+                                      }}
+                                      onBlur={() => setEditingHotel(null)}
+                                      style={{
+                                        padding: '6px 12px',
+                                        border: '2px solid #14B8A6',
+                                        borderRadius: '6px',
+                                        fontSize: '12px',
+                                        minWidth: '200px',
+                                        outline: 'none',
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      <option value="">-- Choisir un hôtel --</option>
+                                      {availableHotels.map(hotel => (
+                                        <option key={hotel.id} value={hotel.name}>
+                                          {hotel.price_range} {hotel.name}
+                                        </option>
+                                      ))}
+                                      <option value="__manual__">✏️ Saisie manuelle...</option>
+                                    </select>
+                                  )}
+                                  <button
+                                    onClick={() => setEditingHotel(null)}
+                                    style={{ fontSize: '10px', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer' }}
+                                  >
+                                    Annuler
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => { loadHotelsForDestination(dest.id); setEditingHotel(dest.id); }}
+                                  style={{
+                                    ...styles.badge('#f0fdf4', '#166534'),
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px'
+                                  }}
+                                  title="Cliquez pour modifier"
+                                >
+                                  <Icon name="bed" size={14} />
+                                  {dest.sleeping}
+                                  <Icon name="edit" size={12} style={{ opacity: 0.5 }} />
+                                </button>
+                              )}
+                            </td>
+                            <td style={styles.td}>
+                              <button onClick={() => { setExplorerCountry(dest.country); setExplorerDest(dest.id); setSidebarTab('explore'); }} style={{ ...styles.badge('#eef2ff', '#4f46e5'), border: 'none', cursor: 'pointer' }}>
+                                <Icon name="plus" size={14} />{poiCount} lieux
+                              </button>
+                            </td>
+                            <td style={styles.td}>{dest.transport && <span style={styles.badge('#fef3c7', '#b45309')}><Icon name="plane" size={12} />{dest.transport.duration}</span>}</td>
+                            <td style={{ ...styles.td, textAlign: 'center' }}>
+                              <button 
+                                onClick={() => removeDestinationFromTrip(dest.id)}
+                                style={{ 
+                                  padding: '6px 10px', 
+                                  background: '#fef2f2', 
+                                  border: 'none', 
+                                  borderRadius: '6px', 
+                                  cursor: 'pointer',
+                                  color: '#dc2626',
+                                  fontSize: '12px'
+                                }}
+                                title="Supprimer"
+                              >
+                                <Icon name="trash" size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div style={{ padding: '24px' }}>
+                    {destinations.map((dest, index) => {
+                      const info = DESTINATION_INFO[dest.id];
+                      const pois = POI_DATA[dest.country]?.[dest.id];
+                      const poiList = pois ? (Array.isArray(pois) ? pois : Object.values(pois).flat()) : [];
+                      const nextDest = destinations[index + 1];
+                      return (<>
+                        <div key={dest.id} style={{ marginBottom: '0', background: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px', borderBottom: '1px solid #f3f4f6' }}>
+                            <img src={info?.image} alt={info?.name} style={{ width: '80px', height: '60px', objectFit: 'cover', borderRadius: '8px' }} />
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ ...styles.destNum, width: '28px', height: '28px', fontSize: '12px', background: getCountryColor(dest.country) }}>{index + 1}</div>
+                                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#111827' }}>{info?.name}</h3>
+                              </div>
+                              <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#6b7280' }}>{dest.nights} nuits · Jour {dest.startDay} au {dest.startDay + dest.nights - 1}</p>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontSize: '14px', fontWeight: 600, color: '#111827' }}>€{dest.nights * dest.costPerNight}</div>
+                              <div style={{ fontSize: '12px', color: '#6b7280' }}>{dest.sleeping}</div>
+                            </div>
+                          </div>
+                          <div style={{ padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '10px' }}>
+                            {poiList.slice(0, 6).map(poi => (
+                              <div key={poi.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', background: '#f8fafc', borderRadius: '8px' }}>
+                                <div style={{ width: '32px', height: '32px', borderRadius: '6px', background: poi.type === 'restaurant' ? '#fff7ed' : '#eef2ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <Icon name={poi.type === 'restaurant' ? 'utensils' : poi.type === 'hotel' ? 'bed' : 'pin'} size={16} />
+                                </div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: '13px', fontWeight: 500, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{poi.name}</div>
+                                  <div style={{ fontSize: '11px', color: '#6b7280' }}>{poi.category}</div>
+                                </div>
+                                <button onClick={() => toggleFavorite(poi)} style={{ background: isFavorite(poi.id) ? '#fef3c7' : '#f1f5f9', border: 'none', borderRadius: '6px', padding: '6px', cursor: 'pointer', color: isFavorite(poi.id) ? '#f59e0b' : '#9ca3af' }}>
+                                  <Icon name="star" size={14} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        
+                        {nextDest && (
+                          <TransportBlock
+                            fromDestination={dest.id}
+                            toDestination={nextDest.id}
+                            onSelect={(transport) => console.log('Transport:', transport)}
+                          />
+                        )}
+                        </>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              <div style={{ width: '40%', borderLeft: '1px solid #e5e7eb' }}>
+                <MapView destination={destinations[0]?.id} pois={[]} selectedPOI={null} onSelectPOI={() => {}} />
+              </div>
+            </div>
+          </>
         )}
 
         {/* VUE BUDGET */}

@@ -109,6 +109,13 @@ const Icons = {
       <line x1="10" y1="9" x2="8" y2="9"/>
     </svg>
   ),
+  transport: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9L18 10l-2-4H8L6 10l-2.5 1.1C2.7 11.3 2 12.1 2 13v3c0 .6.4 1 1 1h2"/>
+      <circle cx="7" cy="17" r="2"/>
+      <circle cx="17" cy="17" r="2"/>
+    </svg>
+  ),
 };
 
 // Mapping des menus
@@ -119,6 +126,7 @@ const MENU_ITEMS = [
   { id: 'budget', icon: 'budget', label: 'Budget' },
   { id: 'packing', icon: 'packing', label: 'Packing' },
   { id: 'documents', icon: 'documents', label: 'Documents' },
+  { id: 'transport', icon: 'transport', label: 'Transport' },
 ];
 
 // Styles

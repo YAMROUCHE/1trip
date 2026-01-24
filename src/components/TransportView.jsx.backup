@@ -100,13 +100,6 @@ const Icons = {
       <circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 000-7h-11a3.5 3.5 0 010-7H15"/>
       <circle cx="18" cy="5" r="3"/>
     </svg>
-  ),
-  globe: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10"/>
-      <line x1="2" y1="12" x2="22" y2="12"/>
-      <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
-    </svg>
   )
 };
 
@@ -146,7 +139,7 @@ const TransportView = () => {
   useEffect(() => { fetchData(); }, []);
 
   // ============================================
-  // ONGLET MON ITINÉRAIRE (FUSIONNÉ AVEC VOLS)
+  // ONGLET MON ITINÉRAIRE
   // ============================================
   const MonItineraireTab = () => {
     const [formData, setFormData] = useState({
@@ -160,123 +153,64 @@ const TransportView = () => {
       duration_hours: '',
       cost_eur: '',
       booking_status: 'a_planifier',
-      notes: '',
-      is_international_flight: false,
-      from_airport_code: '',
-      to_airport_code: ''
+      notes: ''
     });
 
     useEffect(() => {
       if (editingTransport) {
-        // Détecte si c'est un vol international
-        const isFlight = editingTransport._type === 'flight';
         setFormData({
           trip_day: editingTransport.trip_day || '',
-          date: isFlight ? editingTransport.departure_date : (editingTransport.date || ''),
-          from_place: isFlight ? editingTransport.from_city : (editingTransport.from_place || ''),
-          to_place: isFlight ? editingTransport.to_city : (editingTransport.to_place || ''),
-          transport_type: isFlight ? 'avion' : (editingTransport.transport_type || 'grab'),
-          transport_provider: isFlight ? editingTransport.airline : (editingTransport.transport_provider || ''),
+          date: editingTransport.date || '',
+          from_place: editingTransport.from_place || '',
+          to_place: editingTransport.to_place || '',
+          transport_type: editingTransport.transport_type || 'grab',
+          transport_provider: editingTransport.transport_provider || '',
           departure_time: editingTransport.departure_time || '',
           duration_hours: editingTransport.duration_hours || '',
-          cost_eur: isFlight ? editingTransport.price_eur : (editingTransport.cost_eur || ''),
+          cost_eur: editingTransport.cost_eur || '',
           booking_status: editingTransport.booking_status || 'a_planifier',
-          notes: editingTransport.notes || '',
-          is_international_flight: isFlight,
-          from_airport_code: isFlight ? editingTransport.from_airport_code : '',
-          to_airport_code: isFlight ? editingTransport.to_airport_code : ''
+          notes: editingTransport.notes || ''
         });
       }
     }, [editingTransport]);
 
-    const resetForm = () => {
-      setFormData({
-        trip_day: '', date: '', from_place: '', to_place: '',
-        transport_type: 'grab', transport_provider: '', departure_time: '',
-        duration_hours: '', cost_eur: '', booking_status: 'a_planifier', notes: '',
-        is_international_flight: false, from_airport_code: '', to_airport_code: ''
-      });
-    };
-
     const handleSubmit = async (e) => {
       e.preventDefault();
       try {
-        if (formData.is_international_flight) {
-          // Appel API pour vol international
-          const flightData = {
-            from_city: formData.from_place,
-            to_city: formData.to_place,
-            from_airport_code: formData.from_airport_code || formData.from_place.substring(0, 3).toUpperCase(),
-            to_airport_code: formData.to_airport_code || formData.to_place.substring(0, 3).toUpperCase(),
-            departure_date: formData.date,
-            departure_time: formData.departure_time,
+        const url = editingTransport 
+          ? `${API_URL}/api/my-transports/${editingTransport.id}`
+          : `${API_URL}/api/my-transports`;
+        
+        const res = await fetch(url, {
+          method: editingTransport ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...formData,
+            trip_day: formData.trip_day ? parseInt(formData.trip_day) : null,
             duration_hours: formData.duration_hours ? parseFloat(formData.duration_hours) : null,
-            price_eur: formData.cost_eur ? parseFloat(formData.cost_eur) : null,
-            airline: formData.transport_provider,
-            booking_status: formData.booking_status,
-            notes: formData.notes,
-            trip_day: formData.trip_day ? parseInt(formData.trip_day) : null
-          };
-
-          const url = editingTransport && editingTransport._type === 'flight'
-            ? `${API_URL}/api/international-flights/${editingTransport.id}`
-            : `${API_URL}/api/international-flights`;
-          
-          const res = await fetch(url, {
-            method: editingTransport && editingTransport._type === 'flight' ? 'PUT' : 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(flightData)
+            cost_eur: formData.cost_eur ? parseFloat(formData.cost_eur) : null
+          })
+        });
+        
+        if (res.ok) {
+          setShowForm(false);
+          setEditingTransport(null);
+          setFormData({
+            trip_day: '', date: '', from_place: '', to_place: '',
+            transport_type: 'grab', transport_provider: '', departure_time: '',
+            duration_hours: '', cost_eur: '', booking_status: 'a_planifier', notes: ''
           });
-          
-          if (res.ok) {
-            setShowForm(false);
-            setEditingTransport(null);
-            resetForm();
-            fetchData();
-          }
-        } else {
-          // Appel API pour transport normal
-          const url = editingTransport && editingTransport._type !== 'flight'
-            ? `${API_URL}/api/my-transports/${editingTransport.id}`
-            : `${API_URL}/api/my-transports`;
-          
-          const res = await fetch(url, {
-            method: editingTransport && editingTransport._type !== 'flight' ? 'PUT' : 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              trip_day: formData.trip_day ? parseInt(formData.trip_day) : null,
-              date: formData.date,
-              from_place: formData.from_place,
-              to_place: formData.to_place,
-              transport_type: formData.transport_type,
-              transport_provider: formData.transport_provider,
-              departure_time: formData.departure_time,
-              duration_hours: formData.duration_hours ? parseFloat(formData.duration_hours) : null,
-              cost_eur: formData.cost_eur ? parseFloat(formData.cost_eur) : null,
-              booking_status: formData.booking_status,
-              notes: formData.notes
-            })
-          });
-          
-          if (res.ok) {
-            setShowForm(false);
-            setEditingTransport(null);
-            resetForm();
-            fetchData();
-          }
+          fetchData();
         }
       } catch (error) {
         console.error('Erreur:', error);
       }
     };
 
-    const handleDelete = async (transport) => {
+    const handleDelete = async (id) => {
       if (!confirm('Supprimer ce trajet ?')) return;
       try {
-        const url = transport._type === 'flight'
-          ? `${API_URL}/api/international-flights/${transport.id}`
-          : `${API_URL}/api/my-transports/${transport.id}`;
-        const res = await fetch(url, { method: 'DELETE' });
+        const res = await fetch(`${API_URL}/api/my-transports/${id}`, { method: 'DELETE' });
         if (res.ok) fetchData();
       } catch (error) {
         console.error('Erreur:', error);
@@ -292,8 +226,7 @@ const TransportView = () => {
       }
     };
 
-    const getTypeIcon = (type, isFlight) => {
-      if (isFlight) return Icons.plane;
+    const getTypeIcon = (type) => {
       const t = type?.toLowerCase() || '';
       if (t.includes('avion')) return Icons.plane;
       if (t.includes('bus') || t.includes('van')) return Icons.bus;
@@ -302,77 +235,35 @@ const TransportView = () => {
       return Icons.car;
     };
 
-    // Fusionner vols et transports avec un marqueur de type
-    const allTransports = [
-      ...flights.map(f => ({
-        ...f,
-        _type: 'flight',
-        _sortDay: f.trip_day || (f.departure_date ? getDayFromDate(f.departure_date) : 999),
-        _sortTime: f.departure_time || '00:00'
-      })),
-      ...myTransports.map(t => ({
-        ...t,
-        _type: 'transport',
-        _sortDay: t.trip_day || 999,
-        _sortTime: t.departure_time || '00:00'
-      }))
-    ];
-
-    // Fonction pour calculer le jour à partir d'une date
-    function getDayFromDate(dateStr) {
-      if (!dateStr) return 999;
-      const tripStart = new Date('2026-04-01');
-      const date = new Date(dateStr);
-      const diffTime = date - tripStart;
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-      return diffDays > 0 ? diffDays : 999;
-    }
-
     // Grouper par jour
-    const groupedByDay = allTransports.reduce((acc, t) => {
-      const day = t._sortDay;
+    const groupedByDay = myTransports.reduce((acc, t) => {
+      const day = t.trip_day || 0;
       if (!acc[day]) acc[day] = [];
       acc[day].push(t);
       return acc;
     }, {});
 
-    // Trier les transports dans chaque jour par heure
-    Object.keys(groupedByDay).forEach(day => {
-      groupedByDay[day].sort((a, b) => (a._sortTime || '').localeCompare(b._sortTime || ''));
-    });
-
     const sortedDays = Object.keys(groupedByDay).map(Number).sort((a, b) => a - b);
 
-    // Calcul des totaux
-    const totalCost = allTransports.reduce((sum, t) => {
-      if (t._type === 'flight') return sum + (t.price_eur || 0);
-      return sum + (t.cost_eur || 0);
-    }, 0);
-
-    const flightsCount = allTransports.filter(t => t._type === 'flight').length;
-    const transportsCount = allTransports.filter(t => t._type === 'transport').length;
+    // Calcul du coût total
+    const totalCost = myTransports.reduce((sum, t) => sum + (t.cost_eur || 0), 0);
 
     return (
       <div style={{ padding: '20px' }}>
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{ color: '#14B8A6' }}>{Icons.route}</div>
             <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '600' }}>Mon itinéraire transport</h2>
             <span style={{ background: '#f0fdfa', color: '#0d9488', padding: '4px 12px', borderRadius: '12px', fontSize: '14px' }}>
-              {allTransports.length} trajets
+              {myTransports.length} trajets
             </span>
-            {flightsCount > 0 && (
-              <span style={{ background: '#ede9fe', color: '#7c3aed', padding: '4px 12px', borderRadius: '12px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                {Icons.plane} {flightsCount} vols
-              </span>
-            )}
             <span style={{ background: '#fef3c7', color: '#92400e', padding: '4px 12px', borderRadius: '12px', fontSize: '14px' }}>
               {totalCost}€ estimé
             </span>
           </div>
           <button
-            onClick={() => { setShowForm(true); setEditingTransport(null); resetForm(); }}
+            onClick={() => { setShowForm(true); setEditingTransport(null); }}
             style={{
               display: 'flex', alignItems: 'center', gap: '8px',
               background: '#14B8A6', color: 'white', border: 'none',
@@ -394,40 +285,13 @@ const TransportView = () => {
               <h3 style={{ margin: 0, fontSize: '18px' }}>
                 {editingTransport ? 'Modifier le trajet' : 'Nouveau trajet'}
               </h3>
-              <button onClick={() => { setShowForm(false); setEditingTransport(null); resetForm(); }}
+              <button onClick={() => { setShowForm(false); setEditingTransport(null); }}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280' }}>
                 {Icons.x}
               </button>
             </div>
             
             <form onSubmit={handleSubmit}>
-              {/* Checkbox Vol International */}
-              <div style={{ 
-                marginBottom: '20px', padding: '16px', borderRadius: '10px',
-                background: formData.is_international_flight ? '#ede9fe' : '#f9fafb',
-                border: formData.is_international_flight ? '2px solid #7c3aed' : '1px solid #e5e7eb'
-              }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
-                  <input 
-                    type="checkbox" 
-                    checked={formData.is_international_flight}
-                    onChange={(e) => setFormData({
-                      ...formData, 
-                      is_international_flight: e.target.checked,
-                      transport_type: e.target.checked ? 'avion' : 'grab'
-                    })}
-                    style={{ width: '20px', height: '20px', cursor: 'pointer' }}
-                  />
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ color: '#7c3aed' }}>{Icons.globe}</span>
-                    <span style={{ fontWeight: '600', fontSize: '15px' }}>Vol international</span>
-                  </div>
-                  <span style={{ fontSize: '13px', color: '#6b7280' }}>
-                    (vol entre pays : France ↔ Philippines, Philippines → Thaïlande, etc.)
-                  </span>
-                </label>
-              </div>
-
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '16px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '500' }}>Jour du voyage</label>
@@ -453,88 +317,50 @@ const TransportView = () => {
                 </div>
               </div>
 
-              {/* Champs spécifiques aux vols */}
-              {formData.is_international_flight && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', marginBottom: '16px' }}>
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '500' }}>Code aéroport départ</label>
-                    <input type="text" value={formData.from_airport_code} maxLength="3"
-                      onChange={(e) => setFormData({...formData, from_airport_code: e.target.value.toUpperCase()})}
-                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}
-                      placeholder="Ex: CDG, MNL, BKK"
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '500' }}>Code aéroport arrivée</label>
-                    <input type="text" value={formData.to_airport_code} maxLength="3"
-                      onChange={(e) => setFormData({...formData, to_airport_code: e.target.value.toUpperCase()})}
-                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}
-                      placeholder="Ex: CDG, MNL, BKK"
-                    />
-                  </div>
-                </div>
-              )}
-
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', marginBottom: '16px' }}>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '500' }}>
-                    {formData.is_international_flight ? 'Ville départ *' : 'Départ *'}
-                  </label>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '500' }}>Départ *</label>
                   <input type="text" value={formData.from_place} required
                     onChange={(e) => setFormData({...formData, from_place: e.target.value})}
                     style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}
-                    placeholder={formData.is_international_flight ? 'Ex: Paris' : 'Ex: Hôtel Makati'}
+                    placeholder="Ex: Hôtel Makati"
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '500' }}>
-                    {formData.is_international_flight ? 'Ville arrivée *' : 'Arrivée *'}
-                  </label>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '500' }}>Arrivée *</label>
                   <input type="text" value={formData.to_place} required
                     onChange={(e) => setFormData({...formData, to_place: e.target.value})}
                     style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}
-                    placeholder={formData.is_international_flight ? 'Ex: Manille' : 'Ex: Aéroport MNL'}
+                    placeholder="Ex: Aéroport MNL"
                   />
                 </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '16px' }}>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '500' }}>
-                    {formData.is_international_flight ? 'Compagnie' : 'Type *'}
-                  </label>
-                  {formData.is_international_flight ? (
-                    <input type="text" value={formData.transport_provider}
-                      onChange={(e) => setFormData({...formData, transport_provider: e.target.value})}
-                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}
-                      placeholder="Ex: Air France, Emirates"
-                    />
-                  ) : (
-                    <select value={formData.transport_type} required
-                      onChange={(e) => setFormData({...formData, transport_type: e.target.value})}
-                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}>
-                      <option value="avion">Avion</option>
-                      <option value="grab">Grab / Taxi</option>
-                      <option value="bus">Bus</option>
-                      <option value="van">Van</option>
-                      <option value="ferry">Ferry</option>
-                      <option value="train">Train</option>
-                      <option value="navette">Navette</option>
-                      <option value="scooter">Scooter</option>
-                      <option value="marche">À pied</option>
-                    </select>
-                  )}
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '500' }}>Type *</label>
+                  <select value={formData.transport_type} required
+                    onChange={(e) => setFormData({...formData, transport_type: e.target.value})}
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}>
+                    <option value="avion">Avion</option>
+                    <option value="grab">Grab / Taxi</option>
+                    <option value="bus">Bus</option>
+                    <option value="van">Van</option>
+                    <option value="ferry">Ferry</option>
+                    <option value="train">Train</option>
+                    <option value="navette">Navette</option>
+                    <option value="scooter">Scooter</option>
+                    <option value="marche">À pied</option>
+                  </select>
                 </div>
-                {!formData.is_international_flight && (
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '500' }}>Prestataire</label>
-                    <input type="text" value={formData.transport_provider}
-                      onChange={(e) => setFormData({...formData, transport_provider: e.target.value})}
-                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}
-                      placeholder="Ex: AirSwift, Grab Car"
-                    />
-                  </div>
-                )}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '500' }}>Prestataire</label>
+                  <input type="text" value={formData.transport_provider}
+                    onChange={(e) => setFormData({...formData, transport_provider: e.target.value})}
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}
+                    placeholder="Ex: AirSwift, Grab Car"
+                  />
+                </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '500' }}>Durée (h)</label>
                   <input type="number" step="0.5" value={formData.duration_hours}
@@ -570,22 +396,18 @@ const TransportView = () => {
                   <input type="text" value={formData.notes}
                     onChange={(e) => setFormData({...formData, notes: e.target.value})}
                     style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}
-                    placeholder={formData.is_international_flight ? 'Ex: Escale probable, Vol direct' : 'Ex: Réserver la veille'}
+                    placeholder="Ex: Réserver la veille"
                   />
                 </div>
               </div>
 
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                <button type="button" onClick={() => { setShowForm(false); setEditingTransport(null); resetForm(); }}
+                <button type="button" onClick={() => { setShowForm(false); setEditingTransport(null); }}
                   style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid #d1d5db', background: 'white', cursor: 'pointer', fontSize: '14px' }}>
                   Annuler
                 </button>
                 <button type="submit"
-                  style={{ 
-                    padding: '10px 20px', borderRadius: '8px', border: 'none', 
-                    background: formData.is_international_flight ? '#7c3aed' : '#14B8A6', 
-                    color: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: '500' 
-                  }}>
+                  style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: '#14B8A6', color: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}>
                   {editingTransport ? 'Modifier' : 'Ajouter'}
                 </button>
               </div>
@@ -602,63 +424,39 @@ const TransportView = () => {
             }}>
               {Icons.calendar}
               <span style={{ fontWeight: '600', fontSize: '16px' }}>
-                {day === 999 ? 'Date à définir' : `Jour ${day}`}
+                {day === 0 ? 'Non planifié' : `Jour ${day}`}
               </span>
               {groupedByDay[day][0]?.date && (
                 <span style={{ color: '#6b7280', fontSize: '14px' }}>
-                  - {new Date(groupedByDay[day][0].date || groupedByDay[day][0].departure_date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}
+                  - {new Date(groupedByDay[day][0].date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}
                 </span>
               )}
             </div>
 
             {groupedByDay[day].map((transport) => {
               const status = getStatusStyle(transport.booking_status);
-              const isFlight = transport._type === 'flight';
-              const fromText = isFlight ? transport.from_city : transport.from_place;
-              const toText = isFlight ? transport.to_city : transport.to_place;
-              const cost = isFlight ? transport.price_eur : transport.cost_eur;
-              const provider = isFlight ? transport.airline : transport.transport_provider;
-              const time = isFlight ? transport.departure_time : transport.departure_time;
-
               return (
-                <div key={`${transport._type}-${transport.id}`} style={{
-                  background: 'white', 
-                  border: isFlight ? '2px solid #7c3aed' : '1px solid #e5e7eb', 
-                  borderRadius: '10px',
+                <div key={transport.id} style={{
+                  background: 'white', border: '1px solid #e5e7eb', borderRadius: '10px',
                   padding: '16px', marginBottom: '8px', marginLeft: '20px',
                   display: 'flex', alignItems: 'center', gap: '16px'
                 }}>
-                  <div style={{ 
-                    color: isFlight ? '#7c3aed' : '#14B8A6', 
-                    background: isFlight ? '#ede9fe' : '#f0fdfa', 
-                    padding: '10px', borderRadius: '8px' 
-                  }}>
-                    {getTypeIcon(transport.transport_type, isFlight)}
+                  <div style={{ color: '#14B8A6', background: '#f0fdfa', padding: '10px', borderRadius: '8px' }}>
+                    {getTypeIcon(transport.transport_type)}
                   </div>
 
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                      {time && (
-                        <span style={{ fontWeight: '600', color: isFlight ? '#7c3aed' : '#14B8A6' }}>{time}</span>
+                      {transport.departure_time && (
+                        <span style={{ fontWeight: '600', color: '#14B8A6' }}>{transport.departure_time}</span>
                       )}
-                      {isFlight && transport.from_airport_code && (
-                        <span style={{ fontWeight: '700', fontSize: '16px' }}>{transport.from_airport_code}</span>
-                      )}
-                      <span style={{ fontWeight: '500' }}>{fromText}</span>
+                      <span style={{ fontWeight: '500' }}>{transport.from_place}</span>
                       <span style={{ color: '#9ca3af' }}>{Icons.arrowRight}</span>
-                      {isFlight && transport.to_airport_code && (
-                        <span style={{ fontWeight: '700', fontSize: '16px' }}>{transport.to_airport_code}</span>
-                      )}
-                      <span style={{ fontWeight: '500' }}>{toText}</span>
+                      <span style={{ fontWeight: '500' }}>{transport.to_place}</span>
                     </div>
-                    <div style={{ fontSize: '13px', color: '#6b7280', display: 'flex', gap: '16px', alignItems: 'center' }}>
-                      {isFlight && (
-                        <span style={{ background: '#ede9fe', color: '#7c3aed', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: '600' }}>
-                          VOL INTERNATIONAL
-                        </span>
-                      )}
-                      {!isFlight && <span style={{ textTransform: 'capitalize' }}>{transport.transport_type}</span>}
-                      {provider && <span>{provider}</span>}
+                    <div style={{ fontSize: '13px', color: '#6b7280', display: 'flex', gap: '16px' }}>
+                      <span style={{ textTransform: 'capitalize' }}>{transport.transport_type}</span>
+                      {transport.transport_provider && <span>{transport.transport_provider}</span>}
                       {transport.notes && <span style={{ fontStyle: 'italic' }}>{transport.notes}</span>}
                     </div>
                   </div>
@@ -669,8 +467,8 @@ const TransportView = () => {
                         {Icons.clock} {transport.duration_hours}h
                       </div>
                     )}
-                    {cost > 0 && (
-                      <div style={{ color: isFlight ? '#7c3aed' : '#14B8A6', fontWeight: '500' }}>{cost}€</div>
+                    {transport.cost_eur > 0 && (
+                      <div style={{ color: '#14B8A6', fontWeight: '500' }}>{transport.cost_eur}€</div>
                     )}
                   </div>
 
@@ -686,7 +484,7 @@ const TransportView = () => {
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', padding: '4px' }}>
                       {Icons.edit}
                     </button>
-                    <button onClick={() => handleDelete(transport)}
+                    <button onClick={() => handleDelete(transport.id)}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: '4px' }}>
                       {Icons.trash}
                     </button>
@@ -697,16 +495,81 @@ const TransportView = () => {
           </div>
         ))}
 
-        {allTransports.length === 0 && !loading && (
+        {myTransports.length === 0 && !loading && (
           <div style={{ textAlign: 'center', padding: '60px', color: '#9ca3af' }}>
             <div style={{ marginBottom: '16px' }}>{Icons.route}</div>
             <p>Aucun trajet planifié.</p>
-            <button onClick={() => { setShowForm(true); resetForm(); }}
+            <button onClick={() => setShowForm(true)}
               style={{ marginTop: '12px', padding: '10px 20px', background: '#14B8A6', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
               Ajouter mon premier trajet
             </button>
           </div>
         )}
+      </div>
+    );
+  };
+
+  // ============================================
+  // ONGLET VOLS
+  // ============================================
+  const VolsTab = () => {
+    const getStatusStyle = (status) => {
+      switch (status) {
+        case 'reserve': return { bg: '#dcfce7', color: '#166534', label: 'Réservé' };
+        case 'a_reserver': return { bg: '#fef3c7', color: '#92400e', label: 'À réserver' };
+        case 'a_planifier': return { bg: '#e0e7ff', color: '#3730a3', label: 'À planifier' };
+        default: return { bg: '#f3f4f6', color: '#374151', label: status };
+      }
+    };
+    const formatDate = (dateStr) => {
+      if (!dateStr) return 'Date à définir';
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+    };
+    return (
+      <div style={{ padding: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+          <div style={{ color: '#14B8A6' }}>{Icons.plane}</div>
+          <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '600' }}>Vols internationaux</h2>
+          <span style={{ background: '#f0fdfa', color: '#0d9488', padding: '4px 12px', borderRadius: '12px', fontSize: '14px' }}>{flights.length} vols</span>
+        </div>
+        <div style={{ position: 'relative', paddingLeft: '30px' }}>
+          <div style={{ position: 'absolute', left: '9px', top: '20px', bottom: '20px', width: '2px', background: '#e5e7eb' }} />
+          {flights.map((flight, index) => {
+            const status = getStatusStyle(flight.booking_status);
+            return (
+              <div key={flight.id} style={{ position: 'relative', marginBottom: '24px', paddingBottom: '24px', borderBottom: index < flights.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
+                <div style={{ position: 'absolute', left: '-25px', top: '4px', width: '12px', height: '12px', borderRadius: '50%', background: flight.booking_status === 'reserve' ? '#10b981' : flight.booking_status === 'a_reserver' ? '#f59e0b' : '#6366f1', border: '2px solid white', boxShadow: '0 0 0 2px #e5e7eb' }} />
+                <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>{Icons.calendar}<span style={{ fontWeight: '500' }}>{formatDate(flight.departure_date)}</span></div>
+                    <span style={{ background: status.bg, color: status.color, padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: '500' }}>{status.label}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
+                    <div style={{ textAlign: 'center', flex: 1 }}>
+                      <div style={{ fontSize: '24px', fontWeight: '700', color: '#111827' }}>{flight.from_airport_code}</div>
+                      <div style={{ fontSize: '14px', color: '#6b7280' }}>{flight.from_city}</div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: '#14B8A6', flex: 1 }}>
+                      <div style={{ color: '#9ca3af', marginBottom: '4px' }}>{Icons.arrowRight}</div>
+                      {flight.duration_hours && <span style={{ fontSize: '12px', color: '#9ca3af' }}>{flight.duration_hours}h</span>}
+                    </div>
+                    <div style={{ textAlign: 'center', flex: 1 }}>
+                      <div style={{ fontSize: '24px', fontWeight: '700', color: '#111827' }}>{flight.to_airport_code}</div>
+                      <div style={{ fontSize: '14px', color: '#6b7280' }}>{flight.to_city}</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '16px', paddingTop: '12px', borderTop: '1px solid #f3f4f6', fontSize: '13px', color: '#6b7280' }}>
+                    {flight.airline && <span>{flight.airline}</span>}
+                    {flight.price_eur && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>{Icons.euro} {flight.price_eur}€</span>}
+                    {flight.notes && <span style={{ fontStyle: 'italic' }}>{flight.notes}</span>}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {flights.length === 0 && !loading && <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>Aucun vol enregistré.</div>}
       </div>
     );
   };
@@ -795,7 +658,7 @@ const TransportView = () => {
   // ============================================
   // ONGLET CONNEXIONS
   // ============================================
-  const ConnexionsTab = () => {
+  const QuotidienTab = () => {
     const [selectedFrom, setSelectedFrom] = useState('');
     const destinations = [...new Set([...connections.map(c => c.from_destination), ...connections.map(c => c.to_destination)])].sort();
     const filteredConnections = selectedFrom ? connections.filter(c => c.from_destination === selectedFrom) : connections.slice(0, 20);
@@ -850,7 +713,7 @@ const TransportView = () => {
   };
 
   // ============================================
-  // RENDU PRINCIPAL (3 onglets au lieu de 4)
+  // RENDU PRINCIPAL
   // ============================================
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#f9fafb' }}>
@@ -858,6 +721,7 @@ const TransportView = () => {
         <div style={{ display: 'flex', gap: '4px', paddingTop: '16px' }}>
           {[
             { id: 'itineraire', label: 'Mon itinéraire', icon: Icons.route },
+            { id: 'vols', label: 'Vols', icon: Icons.plane },
             { id: 'transferts', label: 'Transferts', icon: Icons.car },
             { id: 'connexions', label: 'Connexions', icon: Icons.map }
           ].map(tab => (
@@ -874,8 +738,9 @@ const TransportView = () => {
         ) : (
           <>
             {activeTab === 'itineraire' && <MonItineraireTab />}
+            {activeTab === 'vols' && <VolsTab />}
             {activeTab === 'transferts' && <TransfertsTab />}
-            {activeTab === 'connexions' && <ConnexionsTab />}
+            {activeTab === 'connexions' && <QuotidienTab />}
           </>
         )}
       </div>
