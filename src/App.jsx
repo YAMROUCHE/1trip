@@ -1,614 +1,93 @@
-import { useState, useMemo, useEffect } from 'react';
-import { useAPIData } from './hooks/useAPI';
-import { Icon } from './components/ui';
-import { MapView } from './components/Map';
-import { COUNTRIES, DESTINATIONS } from './data/config';
-import { DESTINATION_INFO } from './data/destinations';
-import { POI_DATA, CATEGORIES, getAllPOIForDestination, getAllPOICount } from './data/poi';
-import './styles/global.css';
-import { ConstruireView } from './components/Construire';
-import { AccueilView } from './components/AccueilView';
-import TransportView from './components/TransportView';
-import { Sidebar } from './components/Sidebar';
-import { TransportBlock } from "./components/TransportBlock";
-import PackingView from "./components/PackingView";
-import DocumentsView from "./components/DocumentsView";
+import { useState, useEffect, useCallback } from 'react';
+import TodayView from './components/TodayView';
+import MonVoyageView from './components/MonVoyageView';
+import BudgetView from './components/BudgetView';
 
-const TRIP_CONFIG = {
-  name: 'Asie du Sud-Est 2026',
-  startDate: '1 avril',
-  endDate: '25 juin',
-  totalDays: 86,
-  budget: 30000,
-};
+const API = 'https://tripflow-api.youssef-amrouche.workers.dev';
 
-// Les destinations sont maintenant chargées depuis localStorage (via Construire)
-const TRIP_DESTINATIONS_DEFAULT = [];
+const TABS = [
+  { id: 'today', label: "Aujourd'hui", path: 'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z' },
+  { id: 'voyage', label: 'Itinéraire', path: 'M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z' },
+  { id: 'budget', label: 'Budget', path: 'M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z' },
+];
 
-const styles = {
-  sidebar: { width: '80px', background: '#ffffff', borderRight: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: '16px', gap: '4px' },
-  sidebarBtn: (active) => ({ width: '60px', height: '56px', borderRadius: '8px', border: 'none', background: active ? '#eef2ff' : 'transparent', color: active ? '#6366f1' : '#6b7280', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '2px', fontSize: '9px', fontWeight: 500, transition: 'all 0.15s' }),
-  header: { padding: '16px 24px', borderBottom: '1px solid #e5e7eb', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
-  stats: { display: 'flex', gap: '32px' },
-  stat: { textAlign: 'right' },
-  statValue: { fontSize: '20px', fontWeight: 700, color: '#111827' },
-  statLabel: { fontSize: '12px', color: '#6b7280', marginTop: '2px' },
-  tabs: { display: 'flex', gap: '0', padding: '0 24px', borderBottom: '1px solid #e5e7eb', background: '#ffffff' },
-  tab: (active) => ({ padding: '12px 20px', fontSize: '13px', fontWeight: 500, background: 'none', border: 'none', color: active ? '#6366f1' : '#6b7280', borderBottom: active ? '2px solid #6366f1' : '2px solid transparent', cursor: 'pointer', marginBottom: '-1px' }),
-  table: { width: '100%', borderCollapse: 'collapse' },
-  th: { padding: '12px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #e5e7eb' },
-  td: { padding: '16px', borderBottom: '1px solid #f3f4f6', verticalAlign: 'middle' },
-  destNum: { width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 600, color: 'white' },
-  nightsControl: { display: 'flex', alignItems: 'center', gap: '12px' },
-  nightsBtn: { width: '28px', height: '28px', borderRadius: '6px', border: '1px solid #e5e7eb', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: '16px' },
-  nightsValue: { fontSize: '15px', fontWeight: 600, color: '#111827', minWidth: '24px', textAlign: 'center' },
-  badge: (bg, color) => ({ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 12px', background: bg, borderRadius: '6px', fontSize: '12px', color: color, fontWeight: 500 }),
-};
-
-const getCountryColor = (country) => {
-  const colors = { philippines: '#3b82f6', thailande: '#ef4444', vietnam: '#f59e0b', bali: '#22c55e' };
-  return colors[country] || '#6b7280';
-};
+function BottomNav({ active, onChange }) {
+  return (
+    <nav style={{
+      position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100,
+      background: '#ffffff',
+      borderTop: '1px solid #e5e7eb',
+      display: 'flex', justifyContent: 'center',
+      paddingBottom: 'env(safe-area-inset-bottom, 8px)',
+    }}>
+      {TABS.map(t => {
+        const act = active === t.id;
+        return (
+          <button key={t.id} onClick={() => onChange(t.id)} style={{
+            flex: 1, maxWidth: 120,
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            gap: 2, padding: '10px 0 6px', background: 'none', border: 'none',
+            cursor: 'pointer', color: act ? '#10b981' : '#9ca3af',
+            transition: 'color 0.15s',
+          }}>
+            <svg width={22} height={22} viewBox="0 0 24 24" fill={act ? '#10b981' : '#9ca3af'}>
+              <path d={t.path} />
+            </svg>
+            <span style={{ fontSize: 10, fontWeight: act ? 600 : 400 }}>{t.label}</span>
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
 
 export default function App() {
-  const [sidebarTab, setSidebarTab] = useState('accueil');
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState('destinations');
-  const [destinations, setDestinations] = useState([]);
-  const [favorites, setFavorites] = useState([]);
-  const [explorerCountry, setExplorerCountry] = useState('philippines');
-  const [explorerDest, setExplorerDest] = useState('el-nido');
-  const [guideCountry, setGuideCountry] = useState('philippines');
-  const [guideDest, setGuideDest] = useState('el-nido');
-  const [guideCategory, setGuideCategory] = useState('all');
-  const [myProgram, setMyProgram] = useState([]);
-  const [editingHotel, setEditingHotel] = useState(null); // { destId, field }
-  const [availableHotels, setAvailableHotels] = useState([]);
-  const [loadingHotels, setLoadingHotels] = useState(false);
+  const [tab, setTab] = useState('today');
+  const [days, setDays] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Charger les hôtels disponibles pour une destination
-  const loadHotelsForDestination = async (destId) => {
-    setLoadingHotels(true);
+  const fetchData = useCallback(async () => {
     try {
-      const response = await fetch(`https://tripflow-api.youssef-amrouche.workers.dev/api/pois?destination=${destId}&category=dormir`);
-      const data = await response.json();
-      setAvailableHotels(data.pois || []);
-    } catch (error) {
-      console.error('Erreur chargement hotels:', error);
-      setAvailableHotels([]);
+      setError(null);
+      const [dr, sr] = await Promise.all([
+        fetch(`${API}/api/voyage/days`),
+        fetch(`${API}/api/voyage/stats`),
+      ]);
+      if (!dr.ok || !sr.ok) throw new Error('API error');
+      const dd = await dr.json();
+      const sd = await sr.json();
+      setDays(dd.days || []);
+      setStats(sd);
+    } catch (e) {
+      console.error(e);
+      setError('Connexion impossible');
+    } finally {
+      setLoading(false);
     }
-    setLoadingHotels(false);
-  };
-
-  // Mettre à jour l'hébergement d'une destination
-  const updateHotel = (destId, hotelName) => {
-    const newDestinations = destinations.map(d => 
-      d.id === destId ? { ...d, sleeping: hotelName } : d
-    );
-    setDestinations(newDestinations);
-    
-    // Mettre à jour localStorage
-    const saved = localStorage.getItem('tripflow-itineraire');
-    if (saved) {
-      const data = JSON.parse(saved);
-      data.etapes = data.etapes.map(e => 
-        e.destination_id === destId ? { ...e, hebergement_nom: hotelName } : e
-      );
-      localStorage.setItem('tripflow-itineraire', JSON.stringify(data));
-    }
-    setEditingHotel(null);
-  };
-
-  // Chargement des données depuis l'API (avec fallback sur données locales)
-
-  // Charger les destinations depuis localStorage (créées dans Construire)
-  useEffect(() => {
-    const loadDestinations = () => {
-      try {
-        const saved = localStorage.getItem('tripflow-itineraire');
-        if (saved) {
-          const data = JSON.parse(saved);
-          if (data.etapes && data.etapes.length > 0) {
-            // Convertir les etapes en format destinations
-            let currentDay = 1;
-            const convertedDestinations = data.etapes.map((etape, index) => {
-              const dest = {
-                id: etape.destination_id,
-                country: etape.country_id || 'philippines',
-                nights: etape.nb_nuits || 3,
-                startDay: currentDay,
-                transport: {
-                  type: etape.transport_type || 'avion',
-                  duration: etape.transport_duree || '2h',
-                  cost: etape.transport_cout || 0
-                },
-                sleeping: etape.hebergement_nom || 'À réserver',
-                costPerNight: etape.hebergement_prix || 50
-              };
-              currentDay += dest.nights;
-              return dest;
-            });
-            setDestinations(convertedDestinations);
-          }
-        }
-      } catch (err) {
-        console.error('Erreur chargement destinations:', err);
-      }
-    };
-    
-    loadDestinations();
-    
-    // Écouter les changements de localStorage
-    window.addEventListener('storage', loadDestinations);
-    return () => window.removeEventListener('storage', loadDestinations);
   }, []);
 
-  const { data: apiData, loading: apiLoading, error: apiError } = useAPIData();
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  const totalNights = destinations.reduce((sum, d) => sum + d.nights, 0);
-  const totalAccommodation = destinations.reduce((sum, d) => sum + (d.nights * d.costPerNight), 0);
-  const totalTransport = destinations.reduce((sum, d) => sum + (d.transport?.cost || 0), 0);
-  const totalCost = totalAccommodation + totalTransport;
-  const totalPOI = apiData?.stats?.totalPOIs || getAllPOICount();
-
-  const updateNights = (id, delta) => {
-    setDestinations(prev => prev.map(d => d.id === id ? { ...d, nights: Math.max(1, d.nights + delta) } : d));
+  const handleTab = (t) => {
+    setTab(t);
+    window.scrollTo({ top: 0 });
+    if (t !== 'voyage') fetchData();
   };
-
-  const toggleFavorite = (poi) => {
-    setFavorites(prev => prev.some(f => f.id === poi.id) ? prev.filter(f => f.id !== poi.id) : [...prev, poi]);
-  };
-
-  const isFavorite = (id) => favorites.some(f => f.id === id);
-
-  const addToProgram = (poi) => {
-    if (!myProgram.find(p => p.id === poi.id)) {
-      setMyProgram([...myProgram, poi]);
-    }
-  };
-
-  const removeFromProgram = (poiId) => {
-    setMyProgram(myProgram.filter(p => p.id !== poiId));
-  };
-
-  const isInProgram = (poiId) => myProgram.some(p => p.id === poiId);
-
-  // Vérifier si une destination est déjà dans le voyage
-  const isDestinationInTrip = (destId) => destinations.some(d => d.id === destId);
-
-  // Ajouter une destination au voyage
-  const addDestinationToTrip = (destId) => {
-    if (isDestinationInTrip(destId)) return;
-    
-    const destInfo = DESTINATION_INFO[destId];
-    const country = Object.entries(DESTINATIONS).find(([c, dests]) => dests.includes(destId))?.[0] || 'philippines';
-    
-    // Calculer le startDay
-    const lastDest = destinations[destinations.length - 1];
-    const startDay = lastDest ? lastDest.startDay + lastDest.nights : 1;
-    
-    const newDest = {
-      id: destId,
-      country: country,
-      nights: destInfo?.days || 3,
-      startDay: startDay,
-      transport: { type: 'avion', duration: '2h', cost: 0 },
-      sleeping: 'À réserver',
-      costPerNight: 50
-    };
-    
-    const newDestinations = [...destinations, newDest];
-    setDestinations(newDestinations);
-    
-    // Sauvegarder dans localStorage pour synchroniser avec Construire
-    const saved = localStorage.getItem('tripflow-itineraire');
-    const data = saved ? JSON.parse(saved) : { itineraire: { id: 'trip-1', budget_total: 30000 }, etapes: [] };
-    
-    data.etapes.push({
-      id: 'etape-' + Date.now(),
-      destination_id: destId,
-      destination_name: destInfo?.name || destId,
-      nb_nuits: newDest.nights,
-      hebergement_prix: newDest.costPerNight,
-      transport_type: 'avion',
-      transport_cout: 0,
-      ordre: data.etapes.length + 1
-    });
-    
-    localStorage.setItem('tripflow-itineraire', JSON.stringify(data));
-  };
-
-  // Supprimer une destination du voyage
-  const removeDestinationFromTrip = (destId) => {
-    const newDestinations = destinations.filter(d => d.id !== destId);
-    
-    // Recalculer les startDay
-    let currentDay = 1;
-    const recalculated = newDestinations.map(d => {
-      const updated = { ...d, startDay: currentDay };
-      currentDay += d.nights;
-      return updated;
-    });
-    
-    setDestinations(recalculated);
-    
-    // Mettre à jour localStorage
-    const saved = localStorage.getItem('tripflow-itineraire');
-    if (saved) {
-      const data = JSON.parse(saved);
-      data.etapes = data.etapes.filter(e => e.destination_id !== destId);
-      localStorage.setItem('tripflow-itineraire', JSON.stringify(data));
-    }
-  };
-
-  const explorerPois = useMemo(() => { if (apiData?.poisByDestination?.[explorerDest]) { return apiData.poisByDestination[explorerDest]; } return POI_DATA[explorerCountry]?.[explorerDest] || []; }, [apiData, explorerCountry, explorerDest]);
-  const guidePois = useMemo(() => {
-    if (guideCategory === 'all') {
-      return getAllPOIForDestination(guideCountry, guideDest);
-    }
-    const pois = POI_DATA[guideCountry]?.[guideDest]?.[guideCategory] || [];
-    const cat = CATEGORIES.find(c => c.id === guideCategory);
-    return pois.map(poi => ({ ...poi, categoryId: guideCategory, categoryLabel: cat?.label, categoryColor: cat?.color }));
-  }, [guideCountry, guideDest, guideCategory]);
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#f8fafc' }}>
-      {/* Sidebar */}
-      <Sidebar 
-        isOpen={sidebarOpen} 
-        onToggle={() => setSidebarOpen(!sidebarOpen)} 
-        activeTab={sidebarTab} 
-        onTabChange={setSidebarTab} 
-      />
-
-      {/* Main */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        {/* Header */}
-        <header style={styles.header}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ width: '40px', height: '40px', background: '#f1f5f9', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Icon name="plane" size={20} />
-            </div>
-            <div>
-              <h1 style={{ fontSize: '18px', fontWeight: 700, color: '#111827', margin: 0 }}>{TRIP_CONFIG.name}</h1>
-              <p style={{ fontSize: '13px', color: '#6b7280', margin: 0 }}>{TRIP_CONFIG.startDate} - {TRIP_CONFIG.endDate}</p>
-            </div>
-          </div>
-          <div style={styles.stats}>
-            <div style={styles.stat}>
-              <div style={styles.statValue}>€{totalCost.toLocaleString()}</div>
-              <div style={styles.statLabel}>Coût estimé</div>
-            </div>
-            <div style={styles.stat}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-                <span style={{ ...styles.statValue, color: '#6366f1' }}>{totalNights}</span>
-                <span style={{ fontSize: '14px', color: '#9ca3af' }}>/{TRIP_CONFIG.totalDays}</span>
-              </div>
-              <div style={styles.statLabel}>Nuits</div>
-            </div>
-            <div style={styles.stat}>
-              <div style={styles.statValue}>{destinations.length}</div>
-              <div style={styles.statLabel}>Destinations</div>
-            </div>
-            <div style={styles.stat}>
-              <div style={styles.statValue}>{favorites.length}</div>
-              <div style={styles.statLabel}>Favoris</div>
-            </div>
-          </div>
-        </header>
-
-
-      {/* VUE ACCUEIL */}
-      {sidebarTab === 'accueil' && (
-        <AccueilView 
-          totalNights={totalNights}
-          totalCost={totalCost}
-          budget={TRIP_CONFIG.budget}
-          destinations={destinations}
-          totalPOI={totalPOI}
-          favorites={favorites}
-          onNavigate={setSidebarTab}
-        />
-      )}
-        {/* VUE PLAN */}
-        {sidebarTab === 'monvoyage' && (
-          <ConstruireView
-            onAddFavorite={toggleFavorite}
-            favorites={favorites}
-            apiData={apiData}
-          />
-        )}
-
-        {/* VUE BUDGET */}
-        {sidebarTab === 'budget' && (
-          <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
-              <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '20px' }}>
-                <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '4px' }}>Budget total</div>
-                <div style={{ fontSize: '28px', fontWeight: 700, color: '#111827' }}>€{TRIP_CONFIG.budget.toLocaleString()}</div>
-              </div>
-              <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '20px' }}>
-                <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '4px' }}>Dépenses planifiées</div>
-                <div style={{ fontSize: '28px', fontWeight: 700, color: '#6366f1' }}>€{totalCost.toLocaleString()}</div>
-              </div>
-              <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '20px' }}>
-                <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '4px' }}>Reste disponible</div>
-                <div style={{ fontSize: '28px', fontWeight: 700, color: '#22c55e' }}>€{(TRIP_CONFIG.budget - totalCost).toLocaleString()}</div>
-              </div>
-            </div>
-            <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
-              <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb' }}>
-                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#111827' }}>Détail par catégorie</h3>
-              </div>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: '#f8fafc' }}>
-                    <th style={{ ...styles.th }}>Catégorie</th>
-                    <th style={{ ...styles.th, textAlign: 'right' }}>Montant</th>
-                    <th style={{ ...styles.th, textAlign: 'right' }}>% du budget</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr><td style={styles.td}>Hébergements</td><td style={{ ...styles.td, textAlign: 'right', fontWeight: 600 }}>€{totalAccommodation.toLocaleString()}</td><td style={{ ...styles.td, textAlign: 'right', color: '#6b7280' }}>{Math.round(totalAccommodation/TRIP_CONFIG.budget*100)}%</td></tr>
-                  <tr><td style={styles.td}>Transports</td><td style={{ ...styles.td, textAlign: 'right', fontWeight: 600 }}>€{totalTransport.toLocaleString()}</td><td style={{ ...styles.td, textAlign: 'right', color: '#6b7280' }}>{Math.round(totalTransport/TRIP_CONFIG.budget*100)}%</td></tr>
-                  <tr><td style={styles.td}>Activités (estimé)</td><td style={{ ...styles.td, textAlign: 'right', fontWeight: 600 }}>€2,500</td><td style={{ ...styles.td, textAlign: 'right', color: '#6b7280' }}>8%</td></tr>
-                  <tr><td style={styles.td}>Repas (estimé)</td><td style={{ ...styles.td, textAlign: 'right', fontWeight: 600 }}>€4,300</td><td style={{ ...styles.td, textAlign: 'right', color: '#6b7280' }}>14%</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* VUE FAVORIS */}
-        {sidebarTab === 'favoris' && (
-          <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
-            <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#111827', marginBottom: '20px' }}>Mes favoris ({favorites.length})</h2>
-            {favorites.length === 0 ? (
-              <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '60px', textAlign: 'center' }}>
-                <div style={{ width: '60px', height: '56px', background: '#f1f5f9', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-                  <Icon name="star" size={24} />
-                </div>
-                <p style={{ color: '#6b7280', marginBottom: '8px' }}>Aucun favori pour le moment</p>
-                <p style={{ color: '#9ca3af', fontSize: '14px' }}>Explorez les destinations et ajoutez des lieux à vos favoris</p>
-                <button onClick={() => setSidebarTab('explore')} style={{ marginTop: '16px', padding: '10px 20px', background: '#6366f1', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 500 }}>
-                  Explorer les lieux
-                </button>
-              </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
-                {favorites.map(poi => (
-                  <div key={poi.id} style={{ background: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                      <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: poi.type === 'restaurant' ? '#fff7ed' : poi.type === 'hotel' ? '#f0fdf4' : '#eef2ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <Icon name={poi.type === 'restaurant' ? 'utensils' : poi.type === 'hotel' ? 'bed' : 'pin'} size={20} />
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 600, fontSize: '14px', color: '#111827', marginBottom: '4px' }}>{poi.name}</div>
-                        <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>{poi.category} · {poi.price}</div>
-                        <p style={{ fontSize: '13px', color: '#4b5563', margin: 0, lineHeight: 1.5 }}>{poi.description}</p>
-                      </div>
-                      <button onClick={() => toggleFavorite(poi)} style={{ background: '#fef3c7', border: 'none', borderRadius: '6px', padding: '8px', cursor: 'pointer', color: '#f59e0b' }}>
-                        <Icon name="star" size={16} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* VUE EXPLORER */}
-        {sidebarTab === 'explorer' && (
-          <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-            <div style={{ width: '55%', display: 'flex', flexDirection: 'column', borderRight: '1px solid #e5e7eb' }}>
-              <div style={{ padding: '16px', borderBottom: '1px solid #e5e7eb', background: 'white' }}>
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-                  {COUNTRIES.map(c => (
-                    <button key={c.id} onClick={() => { setExplorerCountry(c.id); setExplorerDest(DESTINATIONS[c.id][0]); }}
-                      style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 500, background: explorerCountry === c.id ? getCountryColor(c.id) : '#f1f5f9', color: explorerCountry === c.id ? 'white' : '#6b7280' }}>
-                      {c.name}
-                    </button>
-                  ))}
-                </div>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {DESTINATIONS[explorerCountry]?.map(d => {
-                    const info = DESTINATION_INFO[d];
-                    return (
-                      <div key={d} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <button onClick={() => setExplorerDest(d)}
-                          style={{ padding: '6px 14px', borderRadius: '20px', border: explorerDest === d ? '2px solid #6366f1' : '1px solid #e5e7eb', cursor: 'pointer', fontSize: '13px', background: 'white', color: explorerDest === d ? '#6366f1' : '#374151', fontWeight: explorerDest === d ? 600 : 400 }}>
-                          {info?.name}
-                        </button>
-                        <button 
-                          onClick={() => isDestinationInTrip(d) ? removeDestinationFromTrip(d) : addDestinationToTrip(d)}
-                          style={{ 
-                            padding: '4px 8px', 
-                            borderRadius: '12px', 
-                            border: 'none', 
-                            cursor: 'pointer', 
-                            fontSize: '11px', 
-                            fontWeight: 500,
-                            background: isDestinationInTrip(d) ? '#dcfce7' : '#14B8A6', 
-                            color: isDestinationInTrip(d) ? '#166534' : 'white'
-                          }}
-                        >
-                          {isDestinationInTrip(d) ? '✓' : '+'}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-              <div style={{ flex: 1, overflow: 'auto', padding: '16px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {(Array.isArray(explorerPois) ? explorerPois : Object.values(explorerPois).flat()).map(poi => (
-                    <div key={poi.id} style={{ background: 'white', borderRadius: '10px', border: '1px solid #e5e7eb', padding: '16px', display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
-                      <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: poi.type === 'restaurant' ? '#fff7ed' : poi.type === 'hotel' ? '#f0fdf4' : '#eef2ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <Icon name={poi.type === 'restaurant' ? 'utensils' : poi.type === 'hotel' ? 'bed' : 'pin'} size={22} />
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                          <span style={{ fontWeight: 600, fontSize: '15px', color: '#111827' }}>{poi.name}</span>
-                          {poi.mustSee && <span style={{ color: '#f59e0b' }}><Icon name="star" size={14} /></span>}
-                          {poi.familyFriendly && <span style={{ fontSize: '11px', padding: '2px 8px', background: '#fef3c7', borderRadius: '4px', color: '#b45309' }}>Famille</span>}
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>{poi.category} · {poi.price}</div>
-                        <p style={{ fontSize: '13px', color: '#4b5563', lineHeight: 1.5, margin: 0 }}>{poi.description}</p>
-                        {poi.tags && (
-                          <div style={{ display: 'flex', gap: '6px', marginTop: '10px', flexWrap: 'wrap' }}>
-                            {poi.tags.slice(0, 4).map(tag => (
-                              <span key={tag} style={{ fontSize: '11px', padding: '3px 8px', background: '#f1f5f9', borderRadius: '4px', color: '#64748b' }}>{tag}</span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <button onClick={() => toggleFavorite(poi)} style={{ background: isFavorite(poi.id) ? '#fef3c7' : '#f1f5f9', border: 'none', borderRadius: '8px', padding: '10px', cursor: 'pointer', color: isFavorite(poi.id) ? '#f59e0b' : '#9ca3af' }}>
-                        <Icon name="star" size={18} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div style={{ width: '45%', position: 'relative' }}>
-              <MapView destination={explorerDest} pois={Array.isArray(explorerPois) ? explorerPois : Object.values(explorerPois).flat()} selectedPOI={null} onSelectPOI={() => {}} />
-            </div>
-          </div>
-        )}
-
-        {/* VUE GUIDE LONELY PLANET */}
-        {sidebarTab === 'guide' && (
-          <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-            <div style={{ width: '55%', display: 'flex', flexDirection: 'column', borderRight: '1px solid #e5e7eb' }}>
-              {/* Sélection Pays */}
-              <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', background: 'white' }}>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  {COUNTRIES.map(c => (
-                    <button key={c.id} onClick={() => { setGuideCountry(c.id); setGuideDest(DESTINATIONS[c.id][0]); setGuideCategory('all'); }}
-                      style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 600, background: guideCountry === c.id ? getCountryColor(c.id) : '#f1f5f9', color: guideCountry === c.id ? 'white' : '#6b7280' }}>
-                      {c.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Sélection Destination */}
-              <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', background: '#fafafa' }}>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {DESTINATIONS[guideCountry]?.map(d => {
-                    const info = DESTINATION_INFO[d];
-                    return (
-                      <button key={d} onClick={() => { setGuideDest(d); setGuideCategory('all'); }}
-                        style={{ padding: '6px 14px', borderRadius: '20px', border: guideDest === d ? '2px solid #6366f1' : '1px solid #e5e7eb', cursor: 'pointer', fontSize: '13px', background: 'white', color: guideDest === d ? '#6366f1' : '#374151', fontWeight: guideDest === d ? 600 : 400 }}>
-                        {info?.name}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Catégories Lonely Planet */}
-              <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', background: 'white' }}>
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  <button onClick={() => setGuideCategory('all')}
-                    style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 500, background: guideCategory === 'all' ? '#111827' : '#f1f5f9', color: guideCategory === 'all' ? 'white' : '#6b7280' }}>
-                    Tout
-                  </button>
-                  {CATEGORIES.map(cat => (
-                    <button key={cat.id} onClick={() => setGuideCategory(cat.id)}
-                      style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '6px', background: guideCategory === cat.id ? (cat.id === 'incontournables' ? '#fef2f2' : '#f0fdf4') : '#f1f5f9', color: guideCategory === cat.id ? cat.color : '#6b7280' }}>
-                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: cat.color }}></span>
-                      {cat.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Mon Programme (mini) */}
-              {myProgram.length > 0 && (
-                <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', background: '#f0fdf4' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 600, color: '#166534' }}>Mon programme : {myProgram.length} lieu(x)</span>
-                    <button onClick={() => setMyProgram([])} style={{ fontSize: '12px', color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer' }}>Vider</button>
-                  </div>
-                </div>
-              )}
-
-              {/* Liste POI style Lonely Planet */}
-              <div style={{ flex: 1, overflow: 'auto', padding: '16px' }}>
-                {CATEGORIES.map(cat => {
-                  const pois = POI_DATA[guideCountry]?.[guideDest]?.[cat.id] || [];
-                  if (pois.length === 0) return null;
-                  if (guideCategory !== 'all' && guideCategory !== cat.id) return null;
-
-                  return (
-                    <div key={cat.id} style={{ marginBottom: '24px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', paddingBottom: '8px', borderBottom: '2px solid ' + cat.color }}>
-                        <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: cat.color }}></span>
-                        <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#111827', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{cat.label}</h3>
-                        <span style={{ fontSize: '12px', color: '#6b7280' }}>({pois.length})</span>
-                      </div>
-
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {pois.map((poi, index) => (
-                          <div key={poi.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '12px', background: 'white', borderRadius: '10px', border: '1px solid #e5e7eb' }}>
-                            <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: cat.color, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, flexShrink: 0 }}>
-                              {index + 1}
-                            </div>
-                            <div style={{ flex: 1 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                                <span style={{ fontWeight: 600, fontSize: '14px', color: '#111827' }}>{poi.name}</span>
-                                {poi.familyFriendly && <span style={{ fontSize: '10px', padding: '2px 6px', background: '#fef3c7', color: '#b45309', borderRadius: '4px' }}>Famille</span>}
-                              </div>
-                              <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '6px' }}>{poi.category} · {poi.price}</div>
-                              <p style={{ fontSize: '13px', color: '#4b5563', margin: 0, lineHeight: 1.5 }}>{poi.description}</p>
-                            </div>
-                            <button onClick={() => isInProgram(poi.id) ? removeFromProgram(poi.id) : addToProgram({ ...poi, categoryId: cat.id, categoryLabel: cat.label, categoryColor: cat.color, destination: guideDest, country: guideCountry })}
-                              style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 500, background: isInProgram(poi.id) ? '#dcfce7' : '#f1f5f9', color: isInProgram(poi.id) ? '#16a34a' : '#6b7280', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <Icon name={isInProgram(poi.id) ? 'check' : 'plus'} size={14} />
-                              {isInProgram(poi.id) ? 'Ajouté' : 'Ajouter'}
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Carte */}
-            <div style={{ width: '45%', position: 'relative' }}>
-              <MapView destination={guideDest} pois={guidePois} selectedPOI={null} onSelectPOI={() => {}} />
-            </div>
-          </div>
-        )}
-
-        {/* VUE CONSTRUIRE */}
-        {sidebarTab === 'construire' && (
-          <ConstruireView
-            onAddFavorite={toggleFavorite}
-            favorites={favorites}
-            apiData={apiData}
-          />
-        )}
-
-        {/* VUE TRANSPORT */}
-        {sidebarTab === 'transport' && (
-          <TransportView />
-        )}
-
-        {/* VUE PACKING */}
-        {sidebarTab === 'packing' && (
-          <PackingView />
-        )}
-
-        {/* VUE DOCUMENTS */}
-        {sidebarTab === 'documents' && (
-          <DocumentsView />
-        )}
+    <div style={{
+      minHeight: '100vh', background: '#fafafa', paddingBottom: 76,
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+      color: '#1a1a1a', WebkitFontSmoothing: 'antialiased',
+    }}>
+      <div style={{ padding: '0 16px', maxWidth: tab === 'voyage' ? 900 : 520, margin: '0 auto' }}>
+        {tab === 'today' && <TodayView days={days} stats={stats} loading={loading} error={error} />}
+        {tab === 'voyage' && <MonVoyageView onRefreshGlobal={fetchData} />}
+        {tab === 'budget' && <BudgetView days={days} stats={stats} loading={loading} error={error} />}
       </div>
+      <BottomNav active={tab} onChange={handleTab} />
     </div>
   );
 }

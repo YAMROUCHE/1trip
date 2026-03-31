@@ -9,10 +9,13 @@ const CRENEAUX = [
 ];
 
 const REPAS_TYPES = [
-  { id: 'petitdej', label: 'Petit-déjeuner', icon: 'coffee', defaultCout: 5 },
-  { id: 'dejeuner', label: 'Déjeuner', icon: 'utensils', defaultCout: 15 },
-  { id: 'diner', label: 'Dîner', icon: 'utensils', defaultCout: 20 }
+  { id: 'petitdej', label: 'Petit-déjeuner', icon: 'coffee', defaultCout: 0 },
+  { id: 'dejeuner', label: 'Déjeuner', icon: 'utensils', defaultCout: 0 },
+  { id: 'diner', label: 'Dîner', icon: 'utensils', defaultCout: 0 }
 ];
+
+// Budget repas par défaut si rien n'est planifié
+const DEFAULT_REPAS_BUDGET = 30;
 
 export function DayCard({
   jour,
@@ -29,23 +32,81 @@ export function DayCard({
   const dest = DESTINATIONS[jour.etape?.destination_id];
   const country = COUNTRIES[dest?.country];
 
-  // Calculer le budget du jour
-  const calculateDayBudget = () => {
+  // Vérifier si un restaurant est défini (activité ou repas manuel)
+  const hasRestaurantsDefined = () => {
+    // 1. Vérifier les restaurants dans les activités
+    const hasRestaurantActivity = CRENEAUX.some(c => {
+      const acts = jour.activites?.[c.id] || [];
+      return acts.some(a => {
+        const actType = (a.type || '').toLowerCase();
+        return actType.includes('restaurant') || actType.includes('restaurer') || actType.includes('bar');
+      });
+    });
+    
+    // 2. Vérifier les repas définis manuellement avec un coût > 0
+    const hasDefinedMeal = REPAS_TYPES.some(r => {
+      const repas = jour.repas?.[r.id];
+      return repas && repas.cout > 0;
+    });
+    
+    return hasRestaurantActivity || hasDefinedMeal;
+  };
+
+  // Calculer le budget repas du jour
+  const calculateRepasBudget = () => {
     let total = 0;
     
-    // Activités
+    // 1. Ajouter les restaurants des activités
     CRENEAUX.forEach(c => {
       const acts = jour.activites?.[c.id] || [];
-      acts.forEach(a => { total += a.cout || 0; });
+      acts.forEach(a => {
+        const actType = (a.type || '').toLowerCase();
+        if (actType.includes('restaurant') || actType.includes('restaurer') || actType.includes('bar')) {
+          total += a.cout || 0;
+        }
+      });
     });
     
-    // Repas
+    // 2. Ajouter les repas définis manuellement
     REPAS_TYPES.forEach(r => {
       const repas = jour.repas?.[r.id];
-      total += repas?.cout || r.defaultCout;
+      if (repas && repas.cout > 0) {
+        total += repas.cout;
+      }
     });
-
+    
     return total;
+  };
+
+  // Calculer le budget activités (sans restaurants)
+  const calculateActivitesBudget = () => {
+    let total = 0;
+    CRENEAUX.forEach(c => {
+      const acts = jour.activites?.[c.id] || [];
+      acts.forEach(a => {
+        const actType = (a.type || '').toLowerCase();
+        // Exclure les restaurants
+        if (!actType.includes('restaurant') && !actType.includes('restaurer') && !actType.includes('bar')) {
+          total += a.cout || 0;
+        }
+      });
+    });
+    return total;
+  };
+
+  // Calculer le budget total du jour
+  const calculateDayBudget = () => {
+    const activites = calculateActivitesBudget();
+    const repas = hasRestaurantsDefined() ? calculateRepasBudget() : DEFAULT_REPAS_BUDGET;
+    return activites + repas;
+  };
+
+  // Détail du budget pour l'affichage
+  const budgetDetails = {
+    activites: calculateActivitesBudget(),
+    repas: hasRestaurantsDefined() ? calculateRepasBudget() : DEFAULT_REPAS_BUDGET,
+    isDefaultRepas: !hasRestaurantsDefined(),
+    total: calculateDayBudget()
   };
 
   const handleSaveNotes = () => {
@@ -94,7 +155,9 @@ export function DayCard({
           padding: '10px 16px',
           backgroundColor: '#f0fdf4',
           borderRadius: 10,
-          border: '1px solid #bbf7d0'
+          border: '1px solid #bbf7d0',
+          minWidth: 100,
+          textAlign: 'center'
         }}>
           <span style={{ fontSize: 13, color: '#166534' }}>Budget jour</span>
           <span style={{ 
@@ -103,8 +166,14 @@ export function DayCard({
             fontWeight: 700, 
             color: '#15803d' 
           }}>
-            {calculateDayBudget()}€
+            {budgetDetails.total}€
           </span>
+          {/* Détail si repas par défaut */}
+          {budgetDetails.isDefaultRepas && (
+            <span style={{ fontSize: 10, color: '#6b7280' }}>
+              (repas estimé)
+            </span>
+          )}
         </div>
       </div>
 
@@ -213,53 +282,62 @@ export function DayCard({
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {activities.map(activity => (
-                      <div 
-                        key={activity.id}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '10px 12px',
-                          backgroundColor: '#f9fafb',
-                          borderRadius: 8
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{ fontSize: 14, color: '#111827' }}>
-                            {activity.nom}
-                          </span>
-                          {activity.cout > 0 && (
-                            <span style={{ 
-                              fontSize: 12, 
-                              color: '#6366f1',
-                              backgroundColor: '#f5f3ff',
-                              padding: '2px 8px',
-                              borderRadius: 4
-                            }}>
-                              {activity.cout}€
-                            </span>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => onRemoveActivity(creneau.id, activity.id)}
+                    {activities.map(activity => {
+                      const actType = (activity.type || '').toLowerCase();
+                      const isRestaurant = actType.includes('restaurant') || actType.includes('restaurer') || actType.includes('bar');
+                      
+                      return (
+                        <div 
+                          key={activity.id}
                           style={{
-                            width: 28,
-                            height: 28,
-                            borderRadius: 6,
-                            border: 'none',
-                            backgroundColor: '#fef2f2',
-                            color: '#dc2626',
-                            cursor: 'pointer',
                             display: 'flex',
                             alignItems: 'center',
-                            justifyContent: 'center'
+                            justifyContent: 'space-between',
+                            padding: '10px 12px',
+                            backgroundColor: isRestaurant ? '#fef3c7' : '#f9fafb',
+                            borderRadius: 8,
+                            border: isRestaurant ? '1px solid #fcd34d' : 'none'
                           }}
                         >
-                          <Icon name="x" size={14} />
-                        </button>
-                      </div>
-                    ))}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            {isRestaurant && (
+                              <span style={{ fontSize: 14 }}>🍽️</span>
+                            )}
+                            <span style={{ fontSize: 14, color: '#111827' }}>
+                              {activity.nom}
+                            </span>
+                            {activity.cout > 0 && (
+                              <span style={{ 
+                                fontSize: 12, 
+                                color: isRestaurant ? '#92400e' : '#6366f1',
+                                backgroundColor: isRestaurant ? '#fef3c7' : '#f5f3ff',
+                                padding: '2px 8px',
+                                borderRadius: 4
+                              }}>
+                                {activity.cout}€
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => onRemoveActivity(creneau.id, activity.id)}
+                            style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: 6,
+                              border: 'none',
+                              backgroundColor: '#fef2f2',
+                              color: '#dc2626',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                          >
+                            <Icon name="x" size={14} />
+                          </button>
+                        </div>
+                      );
+                    })}
                     {/* Zone de drop supplémentaire quand il y a déjà des activités */}
                     {isDragOver && (
                       <div style={{ 
@@ -296,26 +374,35 @@ export function DayCard({
           borderBottom: '1px solid #e5e7eb',
           display: 'flex',
           alignItems: 'center',
-          gap: 10
+          justifyContent: 'space-between'
         }}>
-          <div style={{
-            width: 32,
-            height: 32,
-            borderRadius: 8,
-            backgroundColor: '#fef3c720',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}>
-            🍽️
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              backgroundColor: '#fef3c720',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              🍽️
+            </div>
+            <span style={{ fontWeight: 600, color: '#374151' }}>Restauration</span>
           </div>
-          <span style={{ fontWeight: 600, color: '#374151' }}>Restauration</span>
+          <span style={{ fontSize: 13, color: '#6b7280' }}>
+            {budgetDetails.isDefaultRepas ? (
+              <span style={{ fontStyle: 'italic' }}>~{DEFAULT_REPAS_BUDGET}€ estimé</span>
+            ) : (
+              <span style={{ color: '#15803d', fontWeight: 500 }}>{budgetDetails.repas}€</span>
+            )}
+          </span>
         </div>
 
         <div style={{ padding: 16 }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
             {REPAS_TYPES.map(repas => {
-              const repasData = jour.repas?.[repas.id] || { description: '', cout: repas.defaultCout };
+              const repasData = jour.repas?.[repas.id] || { description: '', cout: 0 };
 
               return (
                 <div key={repas.id} style={{ 
@@ -351,11 +438,12 @@ export function DayCard({
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <input
                       type="number"
-                      value={repasData.cout || repas.defaultCout}
+                      value={repasData.cout || ''}
                       onChange={(e) => onUpdateRepas(repas.id, { 
                         ...repasData, 
                         cout: parseInt(e.target.value) || 0 
                       })}
+                      placeholder="0"
                       style={{
                         width: 60,
                         padding: '6px 8px',
@@ -370,6 +458,20 @@ export function DayCard({
               );
             })}
           </div>
+          
+          {/* Info si budget par défaut */}
+          {budgetDetails.isDefaultRepas && (
+            <div style={{
+              marginTop: 12,
+              padding: '8px 12px',
+              backgroundColor: '#f5f3ff',
+              borderRadius: 6,
+              fontSize: 12,
+              color: '#6b7280'
+            }}>
+              💡 Budget estimé à {DEFAULT_REPAS_BUDGET}€/jour. Ajoutez des restaurants pour un calcul précis.
+            </div>
+          )}
         </div>
       </div>
 

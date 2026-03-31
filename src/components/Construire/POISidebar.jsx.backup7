@@ -42,63 +42,15 @@ const ALWAYS_VISIBLE_TYPES = ['restaurant', 'restaurer', 'bar', 'verre', 'hotel'
 // Types qui sont des hôtels (traitement spécial)
 const HOTEL_TYPES = ['hotel', 'hôtel', 'loger', 'hébergement', 'resort', 'hostel', 'guesthouse', 'villa'];
 
-// Conversion price_level → prix en euros selon le type
-const PRICE_CONVERSION = {
-  // Activités et attractions
-  activite: { 1: 10, 2: 25, 3: 50, 4: 100 },
-  activity: { 1: 10, 2: 25, 3: 50, 4: 100 },
-  attraction: { 1: 5, 2: 15, 3: 30, 4: 60 },
-  
-  // Restaurants et bars
-  restaurant: { 1: 10, 2: 20, 3: 35, 4: 60 },
-  restaurer: { 1: 10, 2: 20, 3: 35, 4: 60 },
-  bar: { 1: 10, 2: 20, 3: 35, 4: 50 },
-  
-  // Hôtels (prix par nuit)
-  hotel: { 1: 30, 2: 60, 3: 120, 4: 200 },
-  hôtel: { 1: 30, 2: 60, 3: 120, 4: 200 },
-  loger: { 1: 30, 2: 60, 3: 120, 4: 200 },
-  hébergement: { 1: 30, 2: 60, 3: 120, 4: 200 },
-  resort: { 1: 50, 2: 100, 3: 180, 4: 300 },
-  hostel: { 1: 15, 2: 25, 3: 40, 4: 60 },
-  guesthouse: { 1: 20, 2: 40, 3: 70, 4: 100 },
-  villa: { 1: 60, 2: 120, 3: 200, 4: 350 },
-  
-  // Default
-  default: { 1: 10, 2: 25, 3: 50, 4: 100 }
-};
-
-// Fonction pour convertir price_level en prix
-const getPriceFromLevel = (poi) => {
-  const type = (poi?.type || 'default').toLowerCase();
-  const priceLevel = poi?.price_level || poi?.priceLevel || 2;
-  
-  let conversionTable = PRICE_CONVERSION.default;
-  for (const [key, table] of Object.entries(PRICE_CONVERSION)) {
-    if (type.includes(key)) {
-      conversionTable = table;
-      break;
-    }
-  }
-  
-  return conversionTable[priceLevel] || conversionTable[2] || 25;
-};
-
-// Fonction pour obtenir le symbole $ 
-const getPriceLevelSymbol = (poi) => {
-  const level = poi?.price_level || poi?.priceLevel || 2;
-  return '$'.repeat(level);
-};
-
 export function POISidebar({ 
   pois, 
   destinationId, 
   onAddPOI,
-  onSelectHotel,
+  onSelectHotel,  // NOUVEAU: callback pour sélectionner un hôtel
   onAddFavorite,
   favorites = [],
   plannedPOIs = [],
-  selectedHotelId = null
+  selectedHotelId = null  // NOUVEAU: ID de l'hôtel actuellement sélectionné
 }) {
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
@@ -136,11 +88,14 @@ export function POISidebar({
         if (!nameMatch && !descMatch && !tagsMatch) return false;
       }
 
-      if (familyOnly && !poi.familyFriendly && !poi.family_friendly) return false;
+      if (familyOnly && !poi.familyFriendly) return false;
 
+      // Type de journée : NE filtre PAS les restos/bars/hôtels
       if (journeyType) {
+        // Si c'est un resto/bar/hôtel, on le garde toujours
         if (isAlwaysVisible(poi)) return true;
         
+        // Sinon, on applique le filtre type de journée
         const journey = JOURNEY_TYPES.find(j => j.id === journeyType);
         if (journey) {
           const textToSearch = `${poi.name} ${poi.description} ${(poi.tags || []).join(' ')}`.toLowerCase();
@@ -156,15 +111,12 @@ export function POISidebar({
   // Trier : Incontournables en premier, puis par prix
   const sortedPOIs = useMemo(() => {
     return [...filteredPOIs].sort((a, b) => {
-      // Incontournables en premier
-      const aMustSee = a.mustSee || a.must_see;
-      const bMustSee = b.mustSee || b.must_see;
-      if (aMustSee && !bMustSee) return -1;
-      if (!aMustSee && bMustSee) return 1;
+      if (a.mustSee && !b.mustSee) return -1;
+      if (!a.mustSee && b.mustSee) return 1;
       
-      // Puis par price_level
-      const priceA = a.price_level || a.priceLevel || 2;
-      const priceB = b.price_level || b.priceLevel || 2;
+      const priceOrder = { '$': 1, '$$': 2, '$$$': 3, '$$$$': 4 };
+      const priceA = priceOrder[a.price] || priceOrder[a.priceRange] || 5;
+      const priceB = priceOrder[b.price] || priceOrder[b.priceRange] || 5;
       return priceA - priceB;
     });
   }, [filteredPOIs]);
@@ -173,12 +125,12 @@ export function POISidebar({
   const groupedPOIs = useMemo(() => {
     const groups = {};
     
-    const mustSees = sortedPOIs.filter(poi => poi.mustSee || poi.must_see);
+    const mustSees = sortedPOIs.filter(poi => poi.mustSee);
     if (mustSees.length > 0) {
       groups['Incontournables'] = mustSees;
     }
     
-    sortedPOIs.filter(poi => !poi.mustSee && !poi.must_see).forEach(poi => {
+    sortedPOIs.filter(poi => !poi.mustSee).forEach(poi => {
       const category = poi.category || poi.type || 'Autre';
       if (!groups[category]) groups[category] = [];
       groups[category].push(poi);
@@ -189,34 +141,39 @@ export function POISidebar({
 
   // Incontournables non planifiés
   const unplannedMustSee = useMemo(() => {
-    const plannedIds = plannedPOIs.map(p => p.id || p.poi_id);
-    return pois.filter(poi => (poi.mustSee || poi.must_see) && !plannedIds.includes(poi.id));
+    const plannedIds = plannedPOIs.map(p => p.id);
+    return pois.filter(poi => poi.mustSee && !plannedIds.includes(poi.id));
   }, [pois, plannedPOIs]);
 
   const getCategoryIcon = (category) => {
     const cat = category?.toLowerCase() || '';
     if (cat.includes('incontournable')) return 'star';
     if (cat.includes('voir')) return 'eye';
-    if (cat.includes('activité') || cat.includes('activite') || cat.includes('activity')) return 'activity';
+    if (cat.includes('activité') || cat.includes('activite')) return 'activity';
     if (cat.includes('restaurant') || cat.includes('restaurer')) return 'utensils';
     if (cat.includes('bar') || cat.includes('verre')) return 'glass';
     if (cat.includes('hôtel') || cat.includes('hotel') || cat.includes('loger')) return 'bed';
-    if (cat.includes('attraction')) return 'camera';
     return 'map-pin';
   };
 
+  const getPriceDisplay = (poi) => {
+    if (poi.price) return poi.price;
+    if (poi.priceRange) return poi.priceRange;
+    return null;
+  };
+
   const isFavorite = (poiId) => favorites.some(f => f.id === poiId);
-  const isPlanned = (poiId) => plannedPOIs.some(p => (p.id === poiId) || (p.poi_id === poiId));
+  const isPlanned = (poiId) => plannedPOIs.some(p => p.id === poiId);
 
   // Générer planning auto
   const handleAutoPlanning = () => {
-    const availablePOIs = sortedPOIs.filter(poi => !isPlanned(poi.id) && !isHotel(poi));
+    const availablePOIs = sortedPOIs.filter(poi => !plannedPOIs.some(p => p.id === poi.id) && !isHotel(poi));
     
     const matinKeywords = ['temple', 'trek', 'randonnée', 'excursion', 'tour', 'visite', 'marché', 'cascade', 'snorkeling'];
     const matinPOI = availablePOIs.find(poi => {
       const text = `${poi.name} ${poi.description} ${(poi.tags || []).join(' ')}`.toLowerCase();
       return matinKeywords.some(k => text.includes(k));
-    }) || availablePOIs.find(poi => poi.mustSee || poi.must_see);
+    }) || availablePOIs.find(poi => poi.mustSee);
 
     const apresmidiKeywords = ['plage', 'beach', 'piscine', 'rizière', 'nature', 'balade', 'lac'];
     const apresmidiPOI = availablePOIs.find(poi => {
@@ -237,7 +194,7 @@ export function POISidebar({
     if (soirPOI) onAddPOI('soir', soirPOI);
   };
 
-  // Ajouter tous les incontournables
+  // Ajouter tous les incontournables (sauf hôtels)
   const handleAddAllMustSee = () => {
     unplannedMustSee.filter(poi => !isHotel(poi)).forEach((poi, index) => {
       const creneaux = ['matin', 'apresmidi', 'soir'];
@@ -393,22 +350,22 @@ export function POISidebar({
           ))}
         </div>
 
-        {/* Ligne 2: Type de journée */}
+        {/* Ligne 2: Type de journée (Plage/Culture/Nature) */}
         <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-          {JOURNEY_TYPES.map(jt => (
+          {JOURNEY_TYPES.map(type => (
             <button
-              key={jt.id}
+              key={type.id}
               onClick={(e) => {
                 e.stopPropagation();
-                setJourneyType(journeyType === jt.id ? null : jt.id);
+                setJourneyType(journeyType === type.id ? null : type.id);
               }}
               style={{
                 flex: 1,
-                padding: '6px 10px',
+                padding: '8px 10px',
                 borderRadius: 6,
-                border: journeyType === jt.id ? '1px solid #6366f1' : '1px solid #e5e7eb',
-                backgroundColor: journeyType === jt.id ? '#eef2ff' : 'white',
-                color: journeyType === jt.id ? '#6366f1' : '#6b7280',
+                border: journeyType === type.id ? '2px solid #6366f1' : '1px solid #e5e7eb',
+                backgroundColor: journeyType === type.id ? '#eef2ff' : 'white',
+                color: journeyType === type.id ? '#4f46e5' : '#374151',
                 fontSize: 12,
                 fontWeight: 500,
                 cursor: 'pointer',
@@ -418,14 +375,19 @@ export function POISidebar({
                 gap: 6
               }}
             >
-              <Icon name={jt.icon} size={14} />
-              {jt.label}
+              <Icon name={type.icon} size={14} />
+              {type.label}
             </button>
           ))}
         </div>
 
-        {/* Ligne 3: Famille + Auto-remplir */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        {/* Ligne 3: Checkbox famille + Bouton auto */}
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between',
+          gap: 12
+        }}>
           <label style={{ 
             display: 'flex', 
             alignItems: 'center', 
@@ -438,7 +400,12 @@ export function POISidebar({
               type="checkbox"
               checked={familyOnly}
               onChange={(e) => setFamilyOnly(e.target.checked)}
-              style={{ cursor: 'pointer' }}
+              onClick={(e) => e.stopPropagation()}
+              style={{ 
+                width: 16, 
+                height: 16,
+                accentColor: '#6366f1' 
+              }}
             />
             Familles uniquement
           </label>
@@ -452,9 +419,9 @@ export function POISidebar({
               padding: '6px 12px',
               backgroundColor: '#f3f4f6',
               color: '#374151',
-              border: 'none',
+              border: '1px solid #e5e7eb',
               borderRadius: 6,
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: 500,
               cursor: 'pointer',
               display: 'flex',
@@ -462,31 +429,61 @@ export function POISidebar({
               gap: 6
             }}
           >
-            <Icon name="zap" size={12} />
+            <Icon name="calendar" size={14} />
             Remplir auto
           </button>
         </div>
       </div>
 
-      {/* Liste des POI */}
-      <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
+      {/* Liste POI */}
+      <div style={{ flex: 1, overflow: 'auto', padding: '16px 20px' }}>
         {sortedPOIs.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 40, color: '#6b7280' }}>
+          <div style={{ 
+            textAlign: 'center', 
+            padding: 40,
+            color: '#9ca3af'
+          }}>
             <Icon name="search" size={32} style={{ marginBottom: 12, opacity: 0.5 }} />
-            <p>Aucun lieu trouvé</p>
+            <p style={{ margin: 0, fontSize: 14 }}>Aucun lieu trouvé</p>
+            {hasActiveFilters && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setJourneyType(null);
+                  setFamilyOnly(false);
+                  setFilter('all');
+                }}
+                style={{
+                  marginTop: 12,
+                  padding: '8px 16px',
+                  backgroundColor: 'white',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: 6,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  color: '#374151'
+                }}
+              >
+                Réinitialiser les filtres
+              </button>
+            )}
           </div>
         ) : (
           Object.entries(groupedPOIs).map(([category, categoryPOIs]) => (
             <div key={category} style={{ marginBottom: 24 }}>
               {/* Header catégorie */}
               <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
+                display: 'flex',
+                alignItems: 'center',
                 justifyContent: 'space-between',
                 marginBottom: 12
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Icon name={getCategoryIcon(category)} size={14} style={{ color: '#6366f1' }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <Icon 
+                    name={getCategoryIcon(category)} 
+                    size={16} 
+                    style={{ color: category === 'Incontournables' ? '#f59e0b' : '#6b7280' }} 
+                  />
                   <span style={{ 
                     fontSize: 13, 
                     fontWeight: 600, 
@@ -499,27 +496,30 @@ export function POISidebar({
                   <span style={{ 
                     fontSize: 12, 
                     color: '#9ca3af',
-                    fontWeight: 400
+                    backgroundColor: '#f3f4f6',
+                    padding: '2px 8px',
+                    borderRadius: 4
                   }}>
                     {categoryPOIs.length}
                   </span>
                 </div>
 
-                {category === 'Incontournables' && unplannedMustSee.length > 0 && (
+                {/* Bouton "Tout ajouter" pour incontournables (sauf hôtels) */}
+                {category === 'Incontournables' && unplannedMustSee.filter(p => !isHotel(p)).length > 0 && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       handleAddAllMustSee();
                     }}
                     style={{
-                      padding: '4px 10px',
+                      padding: '6px 12px',
                       backgroundColor: '#fef3c7',
                       color: '#92400e',
-                      border: 'none',
-                      borderRadius: 4,
-                      fontSize: 11,
-                      cursor: 'pointer',
-                      fontWeight: 500
+                      border: '1px solid #fcd34d',
+                      borderRadius: 6,
+                      fontSize: 12,
+                      fontWeight: 500,
+                      cursor: 'pointer'
                     }}
                   >
                     Tout ajouter
@@ -527,56 +527,96 @@ export function POISidebar({
                 )}
               </div>
 
-              {/* Cards POI */}
+              {/* POI Cards */}
               {categoryPOIs.map(poi => {
                 const poiIsHotel = isHotel(poi);
                 const isSelectedHotel = poiIsHotel && selectedHotelId === poi.id;
-                const poiPrice = getPriceFromLevel(poi);
-                const poiPriceSymbol = getPriceLevelSymbol(poi);
-                const isFamilyFriendly = poi.familyFriendly || poi.family_friendly;
 
                 return (
                   <div
                     key={poi.id}
+                    draggable={!poiIsHotel}
+                    onDragStart={(e) => {
+                      if (poiIsHotel) {
+                        e.preventDefault();
+                        return;
+                      }
+                      e.dataTransfer.setData('application/json', JSON.stringify(poi));
+                      e.dataTransfer.effectAllowed = 'copy';
+                      e.currentTarget.style.opacity = '0.5';
+                    }}
+                    onDragEnd={(e) => {
+                      e.currentTarget.style.opacity = '1';
+                    }}
                     style={{
                       padding: 16,
-                      backgroundColor: isSelectedHotel ? '#f0fdf4' : 'white',
-                      borderRadius: 10,
-                      border: isSelectedHotel ? '2px solid #10b981' : '1px solid #e5e7eb',
                       marginBottom: 12,
-                      transition: 'all 0.15s'
+                      backgroundColor: isSelectedHotel ? '#f0fdf4' : 'white',
+                      border: isSelectedHotel 
+                        ? '2px solid #10b981' 
+                        : isPlanned(poi.id) 
+                          ? '2px solid #10b981' 
+                          : (poi.mustSee ? '1px solid #fcd34d' : '1px solid #e5e7eb'),
+                      borderRadius: 10,
+                      cursor: poiIsHotel ? 'pointer' : 'grab',
+                      transition: 'all 0.15s',
+                      opacity: (!poiIsHotel && isPlanned(poi.id)) ? 0.6 : 1
+                    }}
+                    onMouseOver={(e) => {
+                      if (!isPlanned(poi.id) && !isSelectedHotel) {
+                        e.currentTarget.style.borderColor = poiIsHotel ? '#10b981' : '#6366f1';
+                        e.currentTarget.style.boxShadow = `0 2px 8px rgba(${poiIsHotel ? '16, 185, 129' : '99, 102, 241'}, 0.15)`;
+                      }
+                    }}
+                    onMouseOut={(e) => {
+                      if (isSelectedHotel) {
+                        e.currentTarget.style.borderColor = '#10b981';
+                      } else {
+                        e.currentTarget.style.borderColor = isPlanned(poi.id) ? '#10b981' : (poi.mustSee ? '#fcd34d' : '#e5e7eb');
+                      }
+                      e.currentTarget.style.boxShadow = 'none';
                     }}
                   >
-                    {/* Nom + Favori */}
+                    {/* Ligne 1 : Nom + Favori */}
                     <div style={{ 
                       display: 'flex', 
-                      alignItems: 'flex-start', 
                       justifyContent: 'space-between',
+                      alignItems: 'flex-start',
                       marginBottom: 8
                     }}>
-                      <h4 style={{ 
-                        fontSize: 15, 
+                      <div style={{ 
                         fontWeight: 600, 
+                        fontSize: 15, 
                         color: '#111827',
-                        margin: 0,
-                        flex: 1
+                        flex: 1,
+                        paddingRight: 12
                       }}>
                         {poi.name}
                         {isSelectedHotel && (
                           <span style={{ 
                             marginLeft: 8,
-                            fontSize: 12,
+                            fontSize: 11,
                             color: '#10b981',
                             fontWeight: 500
                           }}>
                             ✓ Sélectionné
                           </span>
                         )}
-                      </h4>
+                        {!poiIsHotel && isPlanned(poi.id) && (
+                          <span style={{ 
+                            marginLeft: 8,
+                            fontSize: 11,
+                            color: '#10b981',
+                            fontWeight: 500
+                          }}>
+                            (ajouté)
+                          </span>
+                        )}
+                      </div>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (onAddFavorite) onAddFavorite(poi);
+                          onAddFavorite?.(poi);
                         }}
                         style={{
                           width: 32,
@@ -618,43 +658,31 @@ export function POISidebar({
                       justifyContent: 'space-between'
                     }}>
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        {/* PRIX EN EUROS */}
-                        <span style={{
-                          fontSize: 12,
-                          padding: '4px 10px',
-                          backgroundColor: '#f0fdf4',
-                          color: '#166534',
-                          borderRadius: 4,
-                          fontWeight: 600
-                        }}>
-                          {poiPrice}€{poiIsHotel ? '/nuit' : ''}
-                        </span>
-                        
-                        {/* Symbole $ pour référence */}
-                        <span style={{
-                          fontSize: 12,
-                          padding: '4px 8px',
-                          backgroundColor: '#f3f4f6',
-                          color: '#6b7280',
-                          borderRadius: 4,
-                          fontWeight: 500
-                        }}>
-                          {poiPriceSymbol}
-                        </span>
-
-                        {isFamilyFriendly && (
+                        {getPriceDisplay(poi) && (
                           <span style={{
                             fontSize: 12,
                             padding: '4px 10px',
-                            backgroundColor: '#dbeafe',
-                            color: '#1e40af',
+                            backgroundColor: '#f0fdf4',
+                            color: '#166534',
+                            borderRadius: 4,
+                            fontWeight: 500
+                          }}>
+                            {getPriceDisplay(poi)}
+                          </span>
+                        )}
+                        {poi.familyFriendly && (
+                          <span style={{
+                            fontSize: 12,
+                            padding: '4px 10px',
+                            backgroundColor: '#f3f4f6',
+                            color: '#374151',
                             borderRadius: 4,
                             fontWeight: 500
                           }}>
                             Famille
                           </span>
                         )}
-                        {(poi.mustSee || poi.must_see) && (
+                        {poi.mustSee && (
                           <span style={{
                             fontSize: 12,
                             padding: '4px 10px',
@@ -682,6 +710,7 @@ export function POISidebar({
 
                       {/* Bouton différent selon le type */}
                       {poiIsHotel ? (
+                        // HÔTEL: Bouton direct "Choisir" (pas de dropdown)
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -707,6 +736,7 @@ export function POISidebar({
                           {isSelectedHotel ? 'Sélectionné' : 'Choisir'}
                         </button>
                       ) : (
+                        // ACTIVITÉ/RESTO: Dropdown avec créneaux
                         !isPlanned(poi.id) && (
                           <div style={{ position: 'relative' }}>
                             <button
@@ -733,6 +763,7 @@ export function POISidebar({
                               <Icon name="chevron-down" size={14} />
                             </button>
 
+                            {/* Dropdown menu */}
                             {openDropdown === poi.id && (
                               <div style={{
                                 position: 'absolute',

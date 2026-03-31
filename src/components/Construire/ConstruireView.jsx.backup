@@ -8,8 +8,13 @@ import { DESTINATION_INFO } from '../../data/destinations';
 import { getAllPOIForDestination } from '../../data/poi';
 import { PRECONISATIONS } from '../../data/preconisations';
 
-// Helper pour trouver le pays d'une destination
-const getCountryForDestination = (destId) => {
+const getCountryForDestination = (destId, apiData) => {
+  // D'abord chercher dans l'API
+  if (apiData?.destinations) {
+    const dest = apiData.destinations.find(d => d.id === destId);
+    if (dest) return dest.country;
+  }
+  // Fallback sur les données locales
   for (const [countryId, destIds] of Object.entries(DESTINATIONS)) {
     if (destIds.includes(destId)) {
       return countryId;
@@ -27,12 +32,10 @@ export function ConstruireView({ onAddFavorite, favorites = [], apiData }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
-  // Charger ou créer l'itinéraire au démarrage
   useEffect(() => {
     loadOrCreateItineraire();
   }, []);
 
-  // Générer les jours quand les étapes changent
   useEffect(() => {
     if (etapes.length > 0) {
       generateJours();
@@ -44,14 +47,12 @@ export function ConstruireView({ onAddFavorite, favorites = [], apiData }) {
   const loadOrCreateItineraire = async () => {
     setLoading(true);
     try {
-      // Utiliser le localStorage
       const saved = localStorage.getItem('tripflow-itineraire');
       if (saved) {
         const data = JSON.parse(saved);
         setItineraire(data.itineraire);
         setEtapes(data.etapes || []);
       } else {
-        // Créer un nouvel itinéraire vide
         const newItineraire = {
           id: 'itineraire-' + Date.now(),
           nom: 'Mon Voyage Asie 2026',
@@ -82,7 +83,6 @@ export function ConstruireView({ onAddFavorite, favorites = [], apiData }) {
     setSaving(false);
   };
 
-  // Auto-save quand les données changent
   useEffect(() => {
     if (itineraire && !loading) {
       const timer = setTimeout(() => {
@@ -99,7 +99,9 @@ export function ConstruireView({ onAddFavorite, favorites = [], apiData }) {
 
     etapes.forEach((etape, etapeIndex) => {
       const destInfo = DESTINATION_INFO[etape.destination_id];
-      const countryId = getCountryForDestination(etape.destination_id);
+      const apiDest = apiData?.destinations?.find(d => d.id === etape.destination_id);
+      const countryId = getCountryForDestination(etape.destination_id, apiData);
+      const destName = destInfo?.name || apiDest?.name || etape.destination_id;
       
       for (let i = 0; i < etape.nb_nuits; i++) {
         const currentDate = new Date(startDate);
@@ -111,7 +113,7 @@ export function ConstruireView({ onAddFavorite, favorites = [], apiData }) {
           etape_id: etape.id,
           etape: etape,
           destination_id: etape.destination_id,
-          destination_name: destInfo?.name || etape.destination_id,
+          destination_name: destName,
           country_id: countryId,
           jour_numero: jourNumero,
           date: currentDate.toISOString().split('T')[0],
@@ -130,17 +132,25 @@ export function ConstruireView({ onAddFavorite, favorites = [], apiData }) {
   };
 
   const handleAddEtape = (destinationId) => {
+    // Chercher d'abord dans les données locales
     const destInfo = DESTINATION_INFO[destinationId];
+    // Puis dans l'API
+    const apiDest = apiData?.destinations?.find(d => d.id === destinationId);
     const preco = PRECONISATIONS[destinationId];
     
-    if (!destInfo) return;
+    // Accepter si on a des infos locales OU des infos API
+    if (!destInfo && !apiDest) {
+      console.error('Destination non trouvée:', destinationId);
+      return;
+    }
 
     const newEtape = {
       id: 'etape-' + Date.now(),
       itineraire_id: itineraire?.id,
       destination_id: destinationId,
+      destination_name: destInfo?.name || apiDest?.name || destinationId,
       ordre: etapes.length + 1,
-      nb_nuits: preco?.nights || destInfo.days || 3,
+      nb_nuits: preco?.nights || destInfo?.days || 3,
       hebergement_nom: '',
       hebergement_prix: preco?.accommodation?.midRange?.min || 50,
       transport_type: 'avion',
@@ -171,7 +181,6 @@ export function ConstruireView({ onAddFavorite, favorites = [], apiData }) {
     ));
   };
 
-  // Calculs budget
   const budgetStats = {
     hebergements: etapes.reduce((sum, e) => sum + ((e.hebergement_prix || 0) * e.nb_nuits), 0),
     transports: etapes.reduce((sum, e) => sum + (e.transport_cout || 0), 0),
@@ -182,8 +191,8 @@ export function ConstruireView({ onAddFavorite, favorites = [], apiData }) {
         (acts.apresmidi?.reduce((s, a) => s + (a.cout || 0), 0) || 0) +
         (acts.soir?.reduce((s, a) => s + (a.cout || 0), 0) || 0);
     }, 0),
-    repas: jours.length * 40, // Estimation 40€/jour pour 3 personnes
-    divers: 2000, // Marge
+    repas: jours.length * 40,
+    divers: 2000,
     total: 0,
     budget: itineraire?.budget_total || 30000,
     reste: 0
@@ -206,7 +215,6 @@ export function ConstruireView({ onAddFavorite, favorites = [], apiData }) {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: '#f9fafb' }}>
-      {/* Header */}
       <div style={{ 
         padding: '20px 24px', 
         backgroundColor: 'white', 
@@ -250,7 +258,6 @@ export function ConstruireView({ onAddFavorite, favorites = [], apiData }) {
         </div>
       </div>
 
-      {/* Tabs */}
       <div style={{ 
         padding: '0 24px',
         backgroundColor: 'white',
@@ -308,7 +315,6 @@ export function ConstruireView({ onAddFavorite, favorites = [], apiData }) {
         </div>
       </div>
 
-      {/* Content */}
       <div style={{ flex: 1, overflow: 'auto' }}>
         {activeTab === 'itineraire' && (
           <ItineraireBuilder
@@ -317,6 +323,7 @@ export function ConstruireView({ onAddFavorite, favorites = [], apiData }) {
             onUpdateEtape={handleUpdateEtape}
             onRemoveEtape={handleRemoveEtape}
             onReorderEtapes={handleReorderEtapes}
+            apiData={apiData}
           />
         )}
         {activeTab === 'planning' && (

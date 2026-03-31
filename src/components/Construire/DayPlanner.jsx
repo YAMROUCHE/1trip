@@ -5,24 +5,90 @@ import { POISidebar } from './POISidebar';
 import { DESTINATIONS, COUNTRIES } from '../../data/config';
 import { getAllPOIForDestination } from '../../data/poi';
 
+// Conversion price_level → prix en euros selon le type
+const PRICE_CONVERSION = {
+  // Activités et attractions
+  activite: { 1: 10, 2: 25, 3: 50, 4: 100 },
+  activity: { 1: 10, 2: 25, 3: 50, 4: 100 },
+  attraction: { 1: 5, 2: 15, 3: 30, 4: 60 },
+  
+  // Restaurants et bars
+  restaurant: { 1: 10, 2: 20, 3: 35, 4: 60 },
+  restaurer: { 1: 10, 2: 20, 3: 35, 4: 60 },
+  bar: { 1: 10, 2: 20, 3: 35, 4: 50 },
+  
+  // Hôtels (prix par nuit)
+  hotel: { 1: 30, 2: 60, 3: 120, 4: 200 },
+  hôtel: { 1: 30, 2: 60, 3: 120, 4: 200 },
+  loger: { 1: 30, 2: 60, 3: 120, 4: 200 },
+  hébergement: { 1: 30, 2: 60, 3: 120, 4: 200 },
+  resort: { 1: 50, 2: 100, 3: 180, 4: 300 },
+  hostel: { 1: 15, 2: 25, 3: 40, 4: 60 },
+  guesthouse: { 1: 20, 2: 40, 3: 70, 4: 100 },
+  villa: { 1: 60, 2: 120, 3: 200, 4: 350 },
+  
+  // Default
+  default: { 1: 10, 2: 25, 3: 50, 4: 100 }
+};
+
+// Fonction pour convertir price_level en prix
+const getPriceFromLevel = (poi) => {
+  const type = (poi?.type || 'default').toLowerCase();
+  const priceLevel = poi?.price_level || poi?.priceLevel || 2; // défaut niveau 2
+  
+  // Trouver la table de conversion appropriée
+  let conversionTable = PRICE_CONVERSION.default;
+  for (const [key, table] of Object.entries(PRICE_CONVERSION)) {
+    if (type.includes(key)) {
+      conversionTable = table;
+      break;
+    }
+  }
+  
+  return conversionTable[priceLevel] || conversionTable[2] || 25;
+};
+
+// Fonction pour vérifier si c'est un hôtel
+const isHotelType = (type) => {
+  const hotelTypes = ['hotel', 'hôtel', 'loger', 'hébergement', 'resort', 'hostel', 'guesthouse', 'villa'];
+  return hotelTypes.some(h => (type || '').toLowerCase().includes(h));
+};
+
 export function DayPlanner({ 
   jours, 
-  etapes, 
+  etapes,
+  onUpdateEtape,
   onUpdateJour,
   onAddFavorite,
   favorites, 
-  apiData}) {
+  apiData
+}) {
   const [selectedJourId, setSelectedJourId] = useState(jours[0]?.id || null);
   const [filterDestination, setFilterDestination] = useState('all');
 
   // Jour sélectionné
   const selectedJour = jours.find(j => j.id === selectedJourId);
   
+  // Étape correspondant au jour sélectionné
+  const selectedEtape = selectedJour ? etapes.find(e => e.id === selectedJour.etape_id) : null;
+  
   // POI disponibles pour la destination du jour sélectionné
   const availablePOIs = useMemo(() => {
     if (!selectedJour) return [];
-    const destId = selectedJour.etape?.destination_id; return apiData?.poisByDestination?.[destId] || getAllPOIForDestination(destId);
+    const destId = selectedJour.etape?.destination_id;
+    return apiData?.poisByDestination?.[destId] || getAllPOIForDestination(destId);
   }, [selectedJour, apiData]);
+
+  // POI planifiés pour le jour sélectionné
+  const plannedPOIs = useMemo(() => {
+    if (!selectedJour) return [];
+    const acts = selectedJour.activites || { matin: [], apresmidi: [], soir: [] };
+    return [
+      ...(acts.matin || []),
+      ...(acts.apresmidi || []),
+      ...(acts.soir || [])
+    ];
+  }, [selectedJour]);
 
   // Regrouper les jours par destination
   const joursByDestination = useMemo(() => {
@@ -52,15 +118,38 @@ export function DayPlanner({
     const activites = { ...selectedJour.activites };
     if (!activites[creneau]) activites[creneau] = [];
     
+    // Calculer le prix à partir de price_level
+    const prix = getPriceFromLevel(poi);
+    
     activites[creneau].push({
       id: 'act-' + Date.now(),
       poi_id: poi?.id || null,
       nom: poi?.name || 'Nouvelle activité',
-      cout: poi?.priceValue || 0,
-      type: poi?.type || 'activite'
+      cout: prix,
+      type: poi?.type || 'activite',
+      price_level: poi?.price_level || 2
     });
 
     onUpdateJour(selectedJour.id, { activites });
+  };
+
+  // Sélectionner un hôtel pour l'étape
+  const handleSelectHotel = (poi) => {
+    if (!selectedEtape || !onUpdateEtape) {
+      console.warn('Impossible de sélectionner un hôtel: étape non trouvée ou onUpdateEtape manquant');
+      return;
+    }
+
+    // Calculer le prix de l'hôtel à partir de price_level
+    const prixNuit = getPriceFromLevel(poi);
+
+    // Mettre à jour l'étape avec l'hôtel sélectionné
+    onUpdateEtape(selectedEtape.id, {
+      hebergement_nom: poi.name,
+      hebergement_prix: prixNuit,
+      hebergement_poi_id: poi.id,
+      hebergement_description: poi.description || ''
+    });
   };
 
   // Supprimer une activité
@@ -135,7 +224,7 @@ export function DayPlanner({
             <option value="all">Toutes les destinations</option>
             {etapes.map(e => (
               <option key={e.destination_id} value={e.destination_id}>
-                {DESTINATIONS[e.destination_id]?.name}
+                {DESTINATIONS[e.destination_id]?.name || e.destination_name}
               </option>
             ))}
           </select>
@@ -147,6 +236,7 @@ export function DayPlanner({
             .map(([destId, destJours]) => {
               const dest = DESTINATIONS[destId];
               const country = COUNTRIES[dest?.country];
+              const etape = etapes.find(e => e.destination_id === destId);
 
               return (
                 <div key={destId} style={{ marginBottom: 16 }}>
@@ -158,10 +248,29 @@ export function DayPlanner({
                     borderRadius: 8,
                     fontSize: 13,
                     fontWeight: 600,
-                    marginBottom: 8
+                    marginBottom: 4
                   }}>
-                    {country?.flag} {dest?.name}
+                    {country?.flag} {dest?.name || destId}
                   </div>
+
+                  {/* Hôtel sélectionné pour cette étape */}
+                  {etape?.hebergement_nom && (
+                    <div style={{
+                      padding: '6px 12px',
+                      backgroundColor: '#f0fdf4',
+                      border: '1px solid #bbf7d0',
+                      borderRadius: 6,
+                      fontSize: 12,
+                      color: '#166534',
+                      marginBottom: 8,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6
+                    }}>
+                      <Icon name="bed" size={12} />
+                      {etape.hebergement_nom}
+                    </div>
+                  )}
 
                   {/* Liste des jours */}
                   {destJours.map(jour => {
@@ -225,14 +334,40 @@ export function DayPlanner({
       {/* Détail du jour (centre) */}
       <div style={{ flex: 1, overflow: 'auto', padding: 24 }}>
         {selectedJour ? (
-          <DayCard
-            jour={selectedJour}
-            onAddActivity={handleAddActivity}
-            onRemoveActivity={handleRemoveActivity}
-            onUpdateRepas={handleUpdateRepas}
-            onUpdateNotes={handleUpdateNotes}
-            formatDate={formatDate}
-          />
+          <>
+            {/* Afficher l'hôtel sélectionné en haut */}
+            {selectedEtape?.hebergement_nom && (
+              <div style={{
+                padding: '12px 16px',
+                backgroundColor: '#f0fdf4',
+                border: '1px solid #bbf7d0',
+                borderRadius: 8,
+                marginBottom: 16,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10
+              }}>
+                <Icon name="bed" size={18} style={{ color: '#10b981' }} />
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: '#166534' }}>
+                    {selectedEtape.hebergement_nom}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#15803d' }}>
+                    {selectedEtape.hebergement_prix}€/nuit • {selectedEtape.nb_nuits} nuits = {selectedEtape.hebergement_prix * selectedEtape.nb_nuits}€
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            <DayCard
+              jour={selectedJour}
+              onAddActivity={handleAddActivity}
+              onRemoveActivity={handleRemoveActivity}
+              onUpdateRepas={handleUpdateRepas}
+              onUpdateNotes={handleUpdateNotes}
+              formatDate={formatDate}
+            />
+          </>
         ) : (
           <div style={{ textAlign: 'center', padding: 40, color: '#6b7280' }}>
             Sélectionnez un jour
@@ -245,8 +380,11 @@ export function DayPlanner({
         pois={availablePOIs}
         destinationId={selectedJour?.etape?.destination_id}
         onAddPOI={handleAddActivity}
+        onSelectHotel={handleSelectHotel}
         onAddFavorite={onAddFavorite}
         favorites={favorites}
+        plannedPOIs={plannedPOIs}
+        selectedHotelId={selectedEtape?.hebergement_poi_id}
       />
     </div>
   );

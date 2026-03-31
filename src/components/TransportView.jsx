@@ -717,10 +717,14 @@ const TransportView = () => {
   const TransfertsTab = () => {
     const countries = [
       { id: 'all', label: 'Tous les pays' },
-      { id: 'philippines', label: 'Philippines' },
+      { id: 'saudi_arabia', label: 'Arabie Saoudite' },
+      { id: 'maldives', label: 'Maldives' },
+      { id: 'singapore', label: 'Singapour' },
+      { id: 'saudi_arabia', label: 'Arabie Saoudite' }, { id: 'maldives', label: 'Maldives' }, { id: 'singapore', label: 'Singapour' }, { id: 'philippines', label: 'Philippines' },
       { id: 'thailande', label: 'Thaïlande' },
       { id: 'vietnam', label: 'Vietnam' },
-      { id: 'bali', label: 'Bali' }
+      { id: 'cambodia', label: 'Cambodge' },
+      { id: 'cambodia', label: 'Cambodge' }, { id: 'bali', label: 'Bali' }
     ];
     const filteredTransport = selectedCountry === 'all' ? localTransport : localTransport.filter(t => t.country === selectedCountry);
     const familyFriendly = filteredTransport.filter(t => t.family_friendly);

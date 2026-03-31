@@ -8,9 +8,6 @@ import { DESTINATION_INFO } from '../../data/destinations';
 import { getAllPOIForDestination } from '../../data/poi';
 import { PRECONISATIONS } from '../../data/preconisations';
 
-// Budget repas par défaut par jour (si aucun restaurant défini)
-const DEFAULT_REPAS_PAR_JOUR = 30; // 30€/jour pour 3 personnes
-
 const getCountryForDestination = (destId, apiData) => {
   // D'abord chercher dans l'API
   if (apiData?.destinations) {
@@ -93,7 +90,7 @@ export function ConstruireView({ onAddFavorite, favorites = [], apiData }) {
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [itineraire, etapes, jours]);
+  }, [itineraire, etapes]);
 
   const generateJours = () => {
     const newJours = [];
@@ -110,9 +107,6 @@ export function ConstruireView({ onAddFavorite, favorites = [], apiData }) {
         const currentDate = new Date(startDate);
         currentDate.setDate(startDate.getDate() + jourNumero - 1);
         
-        // Conserver les données existantes si le jour existe déjà
-        const existingJour = jours.find(j => j.jour_numero === jourNumero);
-        
         newJours.push({
           id: `jour-${jourNumero}`,
           itineraire_id: itineraire?.id,
@@ -126,9 +120,9 @@ export function ConstruireView({ onAddFavorite, favorites = [], apiData }) {
           jour_dans_etape: i + 1,
           is_premier_jour: i === 0,
           is_dernier_jour: i === etape.nb_nuits - 1,
-          activites: existingJour?.activites || { matin: [], apresmidi: [], soir: [] },
-          repas: existingJour?.repas || { petitdej: null, dejeuner: null, diner: null },
-          notes: existingJour?.notes || ''
+          activites: { matin: [], apresmidi: [], soir: [] },
+          repas: { petitdej: null, dejeuner: null, diner: null },
+          notes: ''
         });
         jourNumero++;
       }
@@ -159,7 +153,7 @@ export function ConstruireView({ onAddFavorite, favorites = [], apiData }) {
       nb_nuits: preco?.nights || destInfo?.days || 3,
       hebergement_nom: '',
       hebergement_prix: preco?.accommodation?.midRange?.min || 50,
-      hebergement_poi_id: null,
+      hebergement_poi_id: null,  // NOUVEAU: ID du POI hôtel sélectionné
       hebergement_description: '',
       transport_type: 'avion',
       transport_duree: '',
@@ -189,100 +183,17 @@ export function ConstruireView({ onAddFavorite, favorites = [], apiData }) {
     ));
   };
 
-  // Calculer le budget repas pour un jour
-  const calculateRepasBudgetForDay = (jour) => {
-    let total = 0;
-    let hasRestaurants = false;
-    
-    // 1. Vérifier les restaurants dans les activités
-    const acts = jour.activites || { matin: [], apresmidi: [], soir: [] };
-    ['matin', 'apresmidi', 'soir'].forEach(creneau => {
-      (acts[creneau] || []).forEach(act => {
-        const actType = (act.type || '').toLowerCase();
-        if (actType.includes('restaurant') || actType.includes('restaurer') || actType.includes('bar')) {
-          total += act.cout || 0;
-          hasRestaurants = true;
-        }
-      });
-    });
-    
-    // 2. Vérifier les repas définis
-    const repas = jour.repas || {};
-    ['petitdej', 'dejeuner', 'diner'].forEach(repasType => {
-      if (repas[repasType]) {
-        const coutRepas = repas[repasType].cout || repas[repasType].prix || 0;
-        if (coutRepas > 0) {
-          total += coutRepas;
-          hasRestaurants = true;
-        }
-      }
-    });
-    
-    // 3. Si aucun restaurant défini, utiliser le budget par défaut
-    if (!hasRestaurants) {
-      return DEFAULT_REPAS_PAR_JOUR;
-    }
-    
-    return total;
-  };
-
-  // Calculer le budget activités (sans les restaurants)
-  const calculateActivitesBudget = () => {
-    return jours.reduce((sum, jour) => {
-      const acts = jour.activites || { matin: [], apresmidi: [], soir: [] };
-      let dayTotal = 0;
-      
-      ['matin', 'apresmidi', 'soir'].forEach(creneau => {
-        (acts[creneau] || []).forEach(act => {
-          const actType = (act.type || '').toLowerCase();
-          // Exclure les restaurants du calcul des activités
-          if (!actType.includes('restaurant') && !actType.includes('restaurer') && !actType.includes('bar')) {
-            dayTotal += act.cout || 0;
-          }
-        });
-      });
-      
-      return sum + dayTotal;
-    }, 0);
-  };
-
-  // Calculer le budget repas total
-  const calculateRepasBudgetTotal = () => {
-    return jours.reduce((sum, jour) => {
-      return sum + calculateRepasBudgetForDay(jour);
-    }, 0);
-  };
-
-  // Compter les jours avec restaurants définis
-  const countDaysWithRestaurants = () => {
-    return jours.filter(jour => {
-      const acts = jour.activites || { matin: [], apresmidi: [], soir: [] };
-      const repas = jour.repas || {};
-      
-      // Vérifier les restaurants dans les activités
-      const hasRestaurantActivity = ['matin', 'apresmidi', 'soir'].some(creneau =>
-        (acts[creneau] || []).some(act => {
-          const actType = (act.type || '').toLowerCase();
-          return actType.includes('restaurant') || actType.includes('restaurer') || actType.includes('bar');
-        })
-      );
-      
-      // Vérifier les repas définis
-      const hasDefinedMeal = ['petitdej', 'dejeuner', 'diner'].some(repasType =>
-        repas[repasType] && (repas[repasType].cout > 0 || repas[repasType].prix > 0)
-      );
-      
-      return hasRestaurantActivity || hasDefinedMeal;
-    }).length;
-  };
-
   const budgetStats = {
     hebergements: etapes.reduce((sum, e) => sum + ((e.hebergement_prix || 0) * e.nb_nuits), 0),
     transports: etapes.reduce((sum, e) => sum + (e.transport_cout || 0), 0),
-    activites: calculateActivitesBudget(),
-    repas: calculateRepasBudgetTotal(),
-    repas_jours_definis: countDaysWithRestaurants(),
-    repas_jours_total: jours.length,
+    activites: jours.reduce((sum, j) => {
+      const acts = j.activites || { matin: [], apresmidi: [], soir: [] };
+      return sum + 
+        (acts.matin?.reduce((s, a) => s + (a.cout || 0), 0) || 0) +
+        (acts.apresmidi?.reduce((s, a) => s + (a.cout || 0), 0) || 0) +
+        (acts.soir?.reduce((s, a) => s + (a.cout || 0), 0) || 0);
+    }, 0),
+    repas: jours.length * 40,
     divers: 2000,
     total: 0,
     budget: itineraire?.budget_total || 30000,
@@ -421,7 +332,7 @@ export function ConstruireView({ onAddFavorite, favorites = [], apiData }) {
           <DayPlanner
             jours={jours}
             etapes={etapes}
-            onUpdateEtape={handleUpdateEtape}
+            onUpdateEtape={handleUpdateEtape}  // NOUVEAU: passé à DayPlanner
             onUpdateJour={handleUpdateJour}
             onAddFavorite={onAddFavorite}
             favorites={favorites}
